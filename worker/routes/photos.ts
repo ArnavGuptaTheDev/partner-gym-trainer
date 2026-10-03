@@ -2,13 +2,13 @@ import { removeActivity, upsertActivity } from '../activity';
 import { randomId } from '../crypto';
 import { decodeCursor, page } from '../cursor';
 import { assertLogDate } from '../dates';
-import { badRequest, HttpError, json, notFound, pageLimit } from '../http';
-import { hasMetadata, sniffMime } from '../image';
+import { HttpError, json, notFound, pageLimit } from '../http';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
+import { extFor, intField, readImageUpload, streamImage } from '../upload';
 import { parse, v } from '../validate';
 
-export const MAX_PHOTO_BYTES = 1024 * 1024;
+export { MAX_PHOTO_BYTES } from '../upload';
 export const MAX_UPLOADS_PER_DAY = 10;
 const DAY_MS = 86_400_000;
 
@@ -52,27 +52,15 @@ export function canSeePhoto(c: Ctx, ownerId: string) {
 
 export function registerPhotoRoutes(r: Router) {
   r.post('/api/u/:who/photos', { who: 'self' }, async (c) => {
-    const declared = Number(c.req.headers.get('content-length') ?? 0);
-    if (declared > MAX_PHOTO_BYTES + 16 * 1024) throw new HttpError(413, 'too_large', 'Photos must be 1 MB or smaller after compression.');
-    if (!(c.req.headers.get('content-type') ?? '').includes('multipart/form-data')) throw badRequest('Expected multipart/form-data.');
-
-    const form = await c.req.formData();
-    const file = form.get('file');
-    if (!file || typeof file === 'string') throw badRequest('file: is required', { field: 'file' });
+    const { bytes, mime, form } = await readImageUpload(c);
     const meta = parse(UploadMeta, {
       kind: form.get('kind'),
       date: form.get('date'),
       caption: form.get('caption') ?? undefined,
-      width: form.get('width') ? Number(form.get('width')) : undefined,
-      height: form.get('height') ? Number(form.get('height')) : undefined,
+      width: intField(form, 'width'),
+      height: intField(form, 'height'),
     });
     assertLogDate(meta.date, c.now);
-    if (file.size > MAX_PHOTO_BYTES) throw new HttpError(413, 'too_large', 'Photos must be 1 MB or smaller after compression.');
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const mime = sniffMime(bytes);
-    if (!mime) throw new HttpError(415, 'unsupported', 'Only JPEG or WebP photos are accepted.');
-    if (hasMetadata(bytes, mime)) throw badRequest('This photo still has location/camera metadata. Please re-upload from the app.');
 
     const db = c.env.DB;
     const recent = await db
@@ -84,7 +72,7 @@ export function registerPhotoRoutes(r: Router) {
     }
 
     const id = randomId();
-    const key = `u/${c.user.id}/${id}.${mime === 'image/webp' ? 'webp' : 'jpg'}`;
+    const key = `u/${c.user.id}/${id}.${extFor(mime)}`;
     await c.env.PHOTOS.put(key, bytes, { httpMetadata: { contentType: mime } });
 
     const row: PhotoRow = {
@@ -135,26 +123,14 @@ export function registerPhotoRoutes(r: Router) {
     return json({ items: items.map(photoView), nextCursor });
   });
 
-  // The only way photo bytes leave R2.
+  // The only way gym/chat photo bytes leave R2.
   r.get('/api/photos/:id', {}, async (c) => {
     const row = await c.env.DB.prepare('SELECT user_id, r2_key, mime FROM photos WHERE id = ?')
       .bind(c.params.id)
       .first<{ user_id: string; r2_key: string; mime: string }>();
     // Same 404 for "missing" and "not yours" so ids can't be probed.
     if (!row || !canSeePhoto(c, row.user_id)) throw notFound();
-
-    const etag = `"${c.params.id}"`;
-    const headers = {
-      'content-type': row.mime,
-      'cache-control': 'private, max-age=86400, immutable',
-      etag,
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "default-src 'none'",
-    };
-    if (c.req.headers.get('if-none-match') === etag) return new Response(null, { status: 304, headers });
-    const obj = await c.env.PHOTOS.get(row.r2_key);
-    if (!obj) throw notFound();
-    return new Response(obj.body, { headers: { ...headers, 'content-length': String(obj.size) } });
+    return streamImage(c, c.params.id, row.r2_key, row.mime);
   });
 
   r.delete('/api/u/:who/photos/:id', { who: 'self' }, async (c) => {
@@ -171,13 +147,23 @@ export function registerPhotoRoutes(r: Router) {
 
   r.get('/api/admin/storage', { auth: 'super' }, async (c) => {
     const db = c.env.DB;
-    const [total, perUser] = await db.batch([
-      db.prepare('SELECT COALESCE(sum(bytes), 0) AS totalBytes, count(*) AS photoCount FROM photos'),
+    const [photos, media, perUser] = await db.batch([
+      db.prepare('SELECT COALESCE(sum(bytes), 0) AS bytes, count(*) AS count FROM photos'),
+      db.prepare('SELECT COALESCE(sum(bytes), 0) AS bytes, count(*) AS count FROM plan_media'),
       db.prepare(
-        `SELECT u.display_name AS displayName, sum(p.bytes) AS bytes, count(*) AS count
-         FROM photos p JOIN users u ON u.id = p.user_id GROUP BY p.user_id ORDER BY bytes DESC LIMIT 20`,
+        `SELECT u.display_name AS displayName, sum(x.bytes) AS bytes, count(*) AS count
+         FROM (SELECT user_id, bytes FROM photos UNION ALL SELECT user_id, bytes FROM plan_media) x
+         JOIN users u ON u.id = x.user_id GROUP BY x.user_id ORDER BY bytes DESC LIMIT 20`,
       ),
     ]);
-    return json({ ...(total.results[0] as object), users: perUser.results });
+    const p = photos.results[0] as { bytes: number; count: number };
+    const m = media.results[0] as { bytes: number; count: number };
+    return json({
+      totalBytes: p.bytes + m.bytes,
+      photoCount: p.count,
+      planMediaBytes: m.bytes,
+      planMediaCount: m.count,
+      users: perUser.results,
+    });
   });
 }

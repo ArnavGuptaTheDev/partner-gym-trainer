@@ -2,9 +2,12 @@ import { useEffect, useState } from 'preact/hooks';
 import { log as t, plan as planCopy } from '../content/copy';
 import { ApiError, del, get, patch, post, today, type Me } from '../lib/api';
 import { fmtWeight, fromDisplayWeight, num, toDisplayWeight, weightUnit, type Units } from '../lib/units';
+import type { PlanExercise } from '../lib/plan';
+import { DayHead, RestBox } from './DayBits';
+import ExerciseCard from './ExerciseCard';
 import { ErrorNote, Loading, useMe, useQueryState, WhoToggle, type Who } from './ui';
 
-interface PlannedExercise { id: string; name: string; equipment: string; sets: number | null; reps: string; targetWeightKg: number | null; notes: string }
+type PlannedExercise = PlanExercise & { id: string };
 interface ExerciseLog { id: string; planExerciseId: string | null; name: string; equipment: string; sets: number | null; reps: string; weightKg: number | null; done: boolean }
 interface PlannedMeal { id: string; name: string; items: string; notes: string }
 interface MealLog { id: string; planMealId: string | null; name: string; description: string; calories: number | null }
@@ -12,6 +15,8 @@ interface Day {
   date: string;
   plan: { calorieTarget: number | null; calorieGoal: string } | null;
   plannedExercises: PlannedExercise[];
+  weekday: number;
+  planDay: { title: string; note: string; isRest: boolean; restMessage: string; sameAs: number | null };
   plannedMeals: PlannedMeal[];
   exercises: ExerciseLog[];
   meals: MealLog[];
@@ -94,13 +99,15 @@ function DayLog({ who, date, me }: { who: Who; date: string; me: Me }) {
       </section>
 
       <section class="card stack" aria-labelledby="wo-h">
-        <h2 id="wo-h">{t.workoutTitle}</h2>
-        {day.plannedExercises.length === 0 && <p class="muted" style="margin:0">{t.restDay}</p>}
-        <ul class="list">
-          {day.plannedExercises.map((p) => (
-            <PlannedRow key={p.id} p={p} logged={logByPlan.get(p.id)} units={units} readOnly={readOnly} date={date} act={act} />
-          ))}
-        </ul>
+        <h2 id="wo-h" class="sr-only">{t.workoutTitle}</h2>
+        <DayHead
+          weekday={day.weekday}
+          day={{ weekday: day.weekday, ...day.planDay, sameAs: day.planDay.sameAs }}
+        />
+        {day.plannedExercises.length === 0 && (day.planDay.isRest ? <RestBox message={day.planDay.restMessage} /> : <p class="muted" style="margin:0">{t.restDay}</p>)}
+        {day.plannedExercises.map((p) => (
+          <PlannedRow key={p.id} p={p} logged={logByPlan.get(p.id)} units={units} readOnly={readOnly} date={date} act={act} />
+        ))}
         {extras.length > 0 && (
           <>
             <h3>{t.extraTitle}</h3>
@@ -195,7 +202,7 @@ function PlannedRow({ p, logged, units, readOnly, date, act }: {
 }) {
   const done = !!logged?.done;
   const [sets, setSets] = useState(String(logged?.sets ?? p.sets ?? ''));
-  const [reps, setReps] = useState(logged?.reps || p.reps || '');
+  const [reps, setReps] = useState(logged?.reps || (p.repsMin != null ? String(p.repsMax ?? p.repsMin) : p.reps) || '');
   const [weight, setWeight] = useState(String(toDisplayWeight(logged?.weightKg ?? p.targetWeightKg, units) ?? ''));
   const cbId = `ex-${p.id}`;
 
@@ -221,29 +228,29 @@ function PlannedRow({ p, logged, units, readOnly, date, act }: {
     );
 
   return (
-    <li class="stack" style="gap:8px">
-      <div class="row" style="align-items:flex-start">
-        <input id={cbId} type="checkbox" checked={done} disabled={readOnly} onChange={toggle} style="margin-top:2px" />
-        <label for={cbId} style="flex:1">
-          <strong style={done ? 'text-decoration:line-through;text-decoration-thickness:2px' : ''}>{p.name}</strong>
-          <span class="small muted" style="display:block">
-            {[p.equipment, p.sets && `${p.sets} × ${p.reps}`, p.targetWeightKg != null && fmtWeight(p.targetWeightKg, units)].filter(Boolean).join(' · ')}
-          </span>
-        </label>
-      </div>
-      {!readOnly && done && (
-        <div class="grid-3" style="padding-left:32px">
-          <MiniField id={`${cbId}-s`} label={t.actualSets} value={sets} set={setSets} onBlur={saveActuals} numeric />
-          <MiniField id={`${cbId}-r`} label={t.actualReps} value={reps} set={setReps} onBlur={saveActuals} />
-          <MiniField id={`${cbId}-w`} label={`${t.actualWeight} (${weightUnit(units)})`} value={weight} set={setWeight} onBlur={saveActuals} numeric />
+    <ExerciseCard e={p} units={units} done={done}>
+      <div class="ex-log">
+        <div class="row">
+          <input id={cbId} type="checkbox" checked={done} disabled={readOnly} onChange={toggle} />
+          <label for={cbId}>
+            <strong>{done ? t.doneLabel : t.markDone}</strong>
+            <span class="sr-only">: {p.name}</span>
+          </label>
+          {readOnly && logged && (
+            <span class="small muted" style="margin-left:auto">
+              {[logged.sets && `${logged.sets}×${logged.reps}`, logged.weightKg != null && fmtWeight(logged.weightKg, units)].filter(Boolean).join(' @ ')}
+            </span>
+          )}
         </div>
-      )}
-      {readOnly && logged && (
-        <p class="small" style="margin:0 0 0 32px">
-          {[logged.sets && `${logged.sets}×${logged.reps}`, logged.weightKg != null && fmtWeight(logged.weightKg, units)].filter(Boolean).join(' @ ')}
-        </p>
-      )}
-    </li>
+        {!readOnly && done && (
+          <div class="grid-3">
+            <MiniField id={`${cbId}-s`} label={t.actualSets} value={sets} set={setSets} onBlur={saveActuals} numeric />
+            <MiniField id={`${cbId}-r`} label={t.actualReps} value={reps} set={setReps} onBlur={saveActuals} />
+            <MiniField id={`${cbId}-w`} label={`${t.actualWeight} (${weightUnit(units)})`} value={weight} set={setWeight} onBlur={saveActuals} numeric />
+          </div>
+        )}
+      </div>
+    </ExerciseCard>
   );
 }
 

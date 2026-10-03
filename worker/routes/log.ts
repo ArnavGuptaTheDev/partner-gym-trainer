@@ -4,6 +4,7 @@ import { badRequest, conflict, json, notFound, readJson } from '../http';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { parse, v } from '../validate';
+import { dayView, exerciseView } from './plan';
 import { weightStatements } from './profile';
 
 export const DEFAULT_WATER_TARGET_ML = 2500;
@@ -95,33 +96,49 @@ const mealCols = `id, plan_meal_id AS planMealId, name, description, calories, p
 async function loadDay(c: Ctx, date: string) {
   const db = c.env.DB;
   const uid = c.subjectId;
-  const [plan, plannedEx, plannedMeals, exLogs, mealLogs, day, weight] = await db.batch([
+  const wd = weekdayOf(date);
+  // A day marked "same as" another uses that day's exercise list.
+  const effective = 'COALESCE((SELECT same_as FROM plan_days WHERE user_id = ?1 AND weekday = ?2), ?2)';
+  const [plan, plannedEx, plannedMeals, exLogs, mealLogs, day, weight, planDays, media] = await db.batch([
     db.prepare(
       `SELECT calorie_target AS calorieTarget, calorie_goal AS calorieGoal, protein_g AS proteinG, carbs_g AS carbsG, fat_g AS fatG
        FROM plans WHERE user_id = ?`,
     ).bind(uid),
-    db.prepare(
-      `SELECT id, name, equipment, sets, reps, target_weight_kg AS targetWeightKg, notes
-       FROM plan_exercises WHERE user_id = ? AND weekday = ? ORDER BY position`,
-    ).bind(uid, weekdayOf(date)),
+    db.prepare(`SELECT * FROM plan_exercises WHERE user_id = ?1 AND weekday = ${effective} ORDER BY position`).bind(uid, wd),
     db.prepare('SELECT id, name, items, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(uid),
     db.prepare(`SELECT ${exerciseCols} FROM exercise_logs WHERE user_id = ? AND date = ? ORDER BY created_at`).bind(uid, date),
     db.prepare(`SELECT ${mealCols} FROM meal_logs WHERE user_id = ? AND date = ? ORDER BY created_at`).bind(uid, date),
     db.prepare('SELECT calories_burned AS caloriesBurned, water_ml AS waterMl FROM day_logs WHERE user_id = ? AND date = ?').bind(uid, date),
     db.prepare('SELECT weight_kg AS weightKg FROM weight_logs WHERE user_id = ? AND date = ?').bind(uid, date),
+    db.prepare('SELECT * FROM plan_days WHERE user_id = ?').bind(uid),
+    db.prepare(
+      `SELECT id, plan_exercise_id, width, height FROM plan_media
+       WHERE plan_exercise_id IN (SELECT id FROM plan_exercises WHERE user_id = ?1 AND weekday = ${effective}) ORDER BY position`,
+    ).bind(uid, wd),
   ]);
 
   const exercises = (exLogs.results as Record<string, any>[]).map((e) => ({ ...e, done: !!e.done }) as Record<string, any>);
   const meals = mealLogs.results as Record<string, any>[];
-  const planned = plannedEx.results as { id: string }[];
+  const planned = (plannedEx.results as any[]).map((e) => exerciseView(e, media.results as any[]));
+  const days = new Map((planDays.results as Record<string, any>[]).map((d) => [d.weekday as number, dayView(d)]));
+  const own = days.get(wd);
+  const source = own?.sameAs != null ? days.get(own.sameAs) : undefined;
   const doneIds = new Set(exercises.filter((e) => e.done && e.planExerciseId).map((e) => e.planExerciseId));
   const sum = (k: string) => meals.reduce((s, m) => s + (m[k] ?? 0), 0);
   const dayRow = (day.results[0] as { caloriesBurned: number | null; waterMl: number | null } | undefined) ?? null;
 
   return {
     date,
-    weekday: weekdayOf(date),
+    weekday: wd,
     plan: plan.results[0] ?? null,
+    // Title/note fall back to the day this one copies.
+    planDay: {
+      title: own?.title || source?.title || '',
+      note: own?.note || source?.note || '',
+      isRest: own?.isRest ?? false,
+      restMessage: own?.restMessage ?? '',
+      sameAs: own?.sameAs ?? null,
+    },
     plannedExercises: planned,
     plannedMeals: plannedMeals.results,
     exercises,

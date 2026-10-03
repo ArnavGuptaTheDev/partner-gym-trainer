@@ -6,3 +6,8 @@ dist/
 *.log
 .DS_Store
 seed.sql
+
+# Personal plan page used as import source; never commit (public repo)
+sia-ka-arnav.html
+plan-import*.json
+plan-import*.sql

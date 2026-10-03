@@ -1,47 +1,16 @@
-import { upsertActivity } from '../activity';
 import { randomId } from '../crypto';
-import { isoDate } from '../dates';
-import { conflict, json, readJson } from '../http';
+import { badRequest, conflict, HttpError, json, notFound, readJson } from '../http';
+import { checkPlanRules, mediaIdsOf, PlanBody, planWriteStatements } from '../planwrite';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
-import { parse, v } from '../validate';
+import { extFor, intField, readImageUpload, streamImage } from '../upload';
+import { parse } from '../validate';
+import { canSeePhoto } from './photos';
 
+export { PlanBody } from '../planwrite';
 export const LOW_CALORIE_THRESHOLD = 1200;
-
-const id = v.optional(v.string({ min: 1, max: 64, pattern: /^[A-Za-z0-9-]+$/ }));
-const macro = v.optional(v.nullable(v.number({ min: 0, max: 1000, int: true })));
-
-export const PlanBody = v.object({
-  /** The version the editor started from; omit or 0 when no plan exists yet. */
-  version: v.optional(v.number({ min: 0, int: true })),
-  calorieTarget: v.optional(v.nullable(v.number({ min: 0, max: 10000, int: true }))),
-  calorieGoal: v.enum(['deficit', 'surplus', 'maintain'] as const),
-  proteinG: macro,
-  carbsG: macro,
-  fatG: macro,
-  meals: v.array(
-    v.object({
-      id,
-      name: v.string({ min: 1, max: 60 }),
-      items: v.string({ max: 1000 }),
-      notes: v.optional(v.string({ max: 500 })),
-    }),
-    { max: 12 },
-  ),
-  exercises: v.array(
-    v.object({
-      id,
-      weekday: v.number({ min: 0, max: 6, int: true }),
-      name: v.string({ min: 1, max: 80 }),
-      equipment: v.optional(v.string({ max: 80 })),
-      sets: v.optional(v.nullable(v.number({ min: 1, max: 50, int: true }))),
-      reps: v.optional(v.string({ max: 20 })),
-      targetWeightKg: v.optional(v.nullable(v.number({ min: 0, max: 1000 }))),
-      notes: v.optional(v.string({ max: 500 })),
-    }),
-    { max: 120 },
-  ),
-});
+export const MAX_PLAN_MEDIA_UPLOADS_PER_DAY = 20;
+const DAY_MS = 86_400_000;
 
 export function planWarnings(calorieTarget: number | null | undefined): string[] {
   return calorieTarget != null && calorieTarget > 0 && calorieTarget < LOW_CALORIE_THRESHOLD ? ['calories_low'] : [];
@@ -50,22 +19,101 @@ export function planWarnings(calorieTarget: number | null | undefined): string[]
 /** Whether the caller may edit the subject's plan (mirrors resolveWho 'plan'). */
 const canEdit = (c: Ctx) => !c.isSelf || !c.pair || !!c.pair.allow_self_edit;
 
+export const mediaUrl = (id: string) => `/api/plan-media/${id}`;
+
+interface ExerciseRow {
+  id: string;
+  weekday: number;
+  name: string;
+  alt_name: string;
+  muscles: string;
+  notes: string;
+  equipment: string;
+  sets: number | null;
+  reps: string;
+  reps_min: number | null;
+  reps_max: number | null;
+  reps_suffix: string;
+  target_weight_kg: number | null;
+  icon: string | null;
+  links_json: string;
+}
+interface MediaRow {
+  id: string;
+  plan_exercise_id: string;
+  width: number | null;
+  height: number | null;
+}
+
+/** Exercise shape returned to clients (plan view and the daily log). */
+export function exerciseView(e: ExerciseRow, media: MediaRow[]) {
+  let links: string[] = [];
+  try {
+    links = JSON.parse(e.links_json);
+  } catch {
+    /* keep empty */
+  }
+  return {
+    id: e.id,
+    weekday: e.weekday,
+    name: e.name,
+    altName: e.alt_name,
+    muscles: e.muscles,
+    notes: e.notes,
+    equipment: e.equipment,
+    sets: e.sets,
+    repsMin: e.reps_min,
+    repsMax: e.reps_max,
+    repsSuffix: e.reps_suffix,
+    reps: e.reps,
+    targetWeightKg: e.target_weight_kg,
+    icon: e.icon,
+    links,
+    media: media
+      .filter((m) => m.plan_exercise_id === e.id)
+      .map((m) => ({ id: m.id, url: mediaUrl(m.id), width: m.width, height: m.height })),
+  };
+}
+
+export function dayView(d: Record<string, any>) {
+  return { weekday: d.weekday, title: d.title, note: d.note, isRest: !!d.is_rest, restMessage: d.rest_message, sameAs: d.same_as };
+}
+
 export async function loadPlan(db: D1Database, userId: string) {
-  const [plan, meals, exercises] = await db.batch([
+  const [plan, meals, exercises, days, media] = await db.batch([
     db.prepare(
       `SELECT p.calorie_target AS calorieTarget, p.calorie_goal AS calorieGoal, p.protein_g AS proteinG,
-              p.carbs_g AS carbsG, p.fat_g AS fatG, p.version, p.updated_at AS updatedAt,
+              p.carbs_g AS carbsG, p.fat_g AS fatG, p.title, p.tagline, p.version, p.updated_at AS updatedAt,
               p.updated_by AS updatedById, u.display_name AS updatedByName
        FROM plans p LEFT JOIN users u ON u.id = p.updated_by WHERE p.user_id = ?`,
     ).bind(userId),
     db.prepare('SELECT id, name, items, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(userId),
+    db.prepare('SELECT * FROM plan_exercises WHERE user_id = ? ORDER BY weekday, position').bind(userId),
+    db.prepare('SELECT * FROM plan_days WHERE user_id = ? ORDER BY weekday').bind(userId),
     db.prepare(
-      `SELECT id, weekday, name, equipment, sets, reps, target_weight_kg AS targetWeightKg, notes
-       FROM plan_exercises WHERE user_id = ? ORDER BY weekday, position`,
+      'SELECT id, plan_exercise_id, width, height FROM plan_media WHERE user_id = ? AND plan_exercise_id IS NOT NULL ORDER BY position',
     ).bind(userId),
   ]);
   const p = (plan.results[0] as Record<string, unknown> | undefined) ?? null;
-  return { plan: p, meals: meals.results, exercises: exercises.results };
+  const m = media.results as MediaRow[];
+  return {
+    plan: p,
+    days: (days.results as Record<string, any>[]).map(dayView),
+    meals: meals.results,
+    exercises: (exercises.results as ExerciseRow[]).map((e) => exerciseView(e, m)),
+  };
+}
+
+/**
+ * Lazy cleanup (no cron): unattached uploads older than a day are removed,
+ * rows and R2 objects, whenever that plan gets an upload or a save.
+ */
+async function staleMedia(db: D1Database, userId: string, now: number) {
+  const { results } = await db
+    .prepare('SELECT id, r2_key FROM plan_media WHERE user_id = ? AND plan_exercise_id IS NULL AND created_at < ?')
+    .bind(userId, now - DAY_MS)
+    .all<{ id: string; r2_key: string }>();
+  return results;
 }
 
 export function registerPlanRoutes(r: Router) {
@@ -80,89 +128,80 @@ export function registerPlanRoutes(r: Router) {
 
   r.put('/api/u/:who/plan', { who: 'plan' }, async (c) => {
     const b = parse(PlanBody, await readJson(c.req));
+    checkPlanRules(b);
     const db = c.env.DB;
     const userId = c.subjectId;
 
     // Optimistic concurrency: both partners could have the editor open.
-    const current = await db.prepare('SELECT version FROM plans WHERE user_id = ?').bind(userId).first<{ version: number }>();
-    const currentVersion = current?.version ?? 0;
+    const [current, mediaRows] = await db.batch([
+      db.prepare('SELECT version FROM plans WHERE user_id = ?').bind(userId),
+      db.prepare('SELECT id, r2_key, plan_exercise_id, created_at FROM plan_media WHERE user_id = ?').bind(userId),
+    ]);
+    const currentVersion = (current.results[0] as { version: number } | undefined)?.version ?? 0;
     if (b.version !== undefined && b.version !== currentVersion) {
       throw conflict('This plan was changed while you were editing. Reload to see the latest version.');
     }
 
-    const meals = b.meals.map((m, i) => ({ id: m.id ?? randomId(), position: i, name: m.name, items: m.items, notes: m.notes ?? '' }));
-    const counters = new Map<number, number>();
-    const exercises = b.exercises.map((e) => {
-      const pos = counters.get(e.weekday) ?? 0;
-      counters.set(e.weekday, pos + 1);
-      return {
-        id: e.id ?? randomId(),
-        weekday: e.weekday,
-        position: pos,
-        name: e.name,
-        equipment: e.equipment ?? '',
-        sets: e.sets ?? null,
-        reps: e.reps ?? '',
-        targetWeightKg: e.targetWeightKg ?? null,
-        notes: e.notes ?? '',
-      };
-    });
-    const mealsJson = JSON.stringify(meals);
-    const exJson = JSON.stringify(exercises);
+    // Every referenced photo must already belong to this plan.
+    const owned = new Map((mediaRows.results as { id: string; r2_key: string; plan_exercise_id: string | null; created_at: number }[]).map((m) => [m.id, m]));
+    const keep = new Set(mediaIdsOf(b));
+    for (const mid of keep) if (!owned.has(mid)) throw badRequest('mediaIds: a photo was not found; please re-upload it', { field: 'mediaIds' });
+    // Removed from an exercise, or uploaded and abandoned over a day ago.
+    const drop = [...owned.values()].filter((m) => !keep.has(m.id) && (m.plan_exercise_id !== null || m.created_at < c.now - DAY_MS));
 
-    // A handful of set-based statements regardless of plan size, to stay well
-    // under the free plan's per-invocation query limit. Upserts only touch
-    // rows owned by this user, so a forged id can't hijack someone else's row.
-    await db.batch([
-      db
-        .prepare(
-          `INSERT INTO plans (user_id, calorie_target, calorie_goal, protein_g, carbs_g, fat_g, version, updated_by, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8)
-           ON CONFLICT(user_id) DO UPDATE SET
-             calorie_target = ?2, calorie_goal = ?3, protein_g = ?4, carbs_g = ?5, fat_g = ?6,
-             version = version + 1, updated_by = ?7, updated_at = ?8`,
-        )
-        .bind(userId, b.calorieTarget ?? null, b.calorieGoal, b.proteinG ?? null, b.carbsG ?? null, b.fatG ?? null, c.user.id, c.now),
-      db
-        .prepare(`DELETE FROM plan_meals WHERE user_id = ?1 AND id NOT IN (SELECT json_extract(value, '$.id') FROM json_each(?2))`)
-        .bind(userId, mealsJson),
-      db
-        .prepare(
-          `INSERT INTO plan_meals (id, user_id, position, name, items, notes)
-           SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.position'), json_extract(value, '$.name'),
-                  json_extract(value, '$.items'), json_extract(value, '$.notes')
-           FROM json_each(?2) WHERE true
-           ON CONFLICT(id) DO UPDATE SET position = excluded.position, name = excluded.name,
-             items = excluded.items, notes = excluded.notes
-           WHERE plan_meals.user_id = excluded.user_id`,
-        )
-        .bind(userId, mealsJson),
-      db
-        .prepare(`DELETE FROM plan_exercises WHERE user_id = ?1 AND id NOT IN (SELECT json_extract(value, '$.id') FROM json_each(?2))`)
-        .bind(userId, exJson),
-      db
-        .prepare(
-          `INSERT INTO plan_exercises (id, user_id, weekday, position, name, equipment, sets, reps, target_weight_kg, notes)
-           SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.weekday'), json_extract(value, '$.position'),
-                  json_extract(value, '$.name'), json_extract(value, '$.equipment'), json_extract(value, '$.sets'),
-                  json_extract(value, '$.reps'), json_extract(value, '$.targetWeightKg'), json_extract(value, '$.notes')
-           FROM json_each(?2) WHERE true
-           ON CONFLICT(id) DO UPDATE SET weekday = excluded.weekday, position = excluded.position, name = excluded.name,
-             equipment = excluded.equipment, sets = excluded.sets, reps = excluded.reps,
-             target_weight_kg = excluded.target_weight_kg, notes = excluded.notes
-           WHERE plan_exercises.user_id = excluded.user_id`,
-        )
-        .bind(userId, exJson),
-      upsertActivity(db, {
-        userId: c.user.id,
-        type: 'plan',
-        refId: `${userId}:${isoDate(c.now)}`,
-        date: isoDate(c.now),
-        summary: { forSelf: c.isSelf },
-        now: c.now,
-      }),
-    ]);
+    const stmts = planWriteStatements({ userId, editorId: c.user.id, body: b, now: c.now, newId: randomId, deleteMediaIds: drop.map((m) => m.id) });
+    await db.batch(stmts.map((s) => db.prepare(s.sql).bind(...s.params)));
+    if (drop.length) await c.env.PHOTOS.delete(drop.map((m) => m.r2_key));
 
     return json({ version: currentVersion + 1, warnings: planWarnings(b.calorieTarget) });
+  });
+
+  // Exercise photo upload. Whoever may edit the plan may add photos to it.
+  r.post('/api/u/:who/plan/media', { who: 'plan' }, async (c) => {
+    const { bytes, mime, form } = await readImageUpload(c);
+    const db = c.env.DB;
+    const userId = c.subjectId;
+
+    const [recent, stale] = await Promise.all([
+      db.prepare('SELECT count(*) AS n FROM plan_media WHERE uploaded_by = ? AND created_at > ?').bind(c.user.id, c.now - DAY_MS).first<{ n: number }>(),
+      staleMedia(db, userId, c.now),
+    ]);
+    if ((recent?.n ?? 0) >= MAX_PLAN_MEDIA_UPLOADS_PER_DAY) {
+      throw new HttpError(429, 'upload_limit', `You can add up to ${MAX_PLAN_MEDIA_UPLOADS_PER_DAY} exercise photos a day. Try again tomorrow.`);
+    }
+
+    const id = randomId();
+    const key = `plan/${userId}/${id}.${extFor(mime)}`;
+    await c.env.PHOTOS.put(key, bytes, { httpMetadata: { contentType: mime } });
+    const width = intField(form, 'width') ?? null;
+    const height = intField(form, 'height') ?? null;
+    const stmts = [
+      db
+        .prepare(
+          `INSERT INTO plan_media (id, user_id, plan_exercise_id, position, r2_key, bytes, width, height, mime, uploaded_by, created_at)
+           VALUES (?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, userId, key, bytes.byteLength, width, height, mime, c.user.id, c.now),
+    ];
+    if (stale.length) {
+      stmts.push(db.prepare('DELETE FROM plan_media WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(stale.map((s) => s.id))));
+    }
+    try {
+      await db.batch(stmts);
+    } catch (e) {
+      await c.env.PHOTOS.delete(key);
+      throw e;
+    }
+    if (stale.length) await c.env.PHOTOS.delete(stale.map((s) => s.r2_key));
+    return json({ id, url: mediaUrl(id), width, height }, { status: 201 });
+  });
+
+  // The only way exercise photo bytes leave R2: plan owner or their partner.
+  r.get('/api/plan-media/:id', {}, async (c) => {
+    const row = await c.env.DB.prepare('SELECT user_id, r2_key, mime FROM plan_media WHERE id = ?')
+      .bind(c.params.id)
+      .first<{ user_id: string; r2_key: string; mime: string }>();
+    if (!row || !canSeePhoto(c, row.user_id)) throw notFound();
+    return streamImage(c, c.params.id, row.r2_key, row.mime);
   });
 }

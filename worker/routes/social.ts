@@ -196,7 +196,12 @@ export function registerSocialRoutes(r: Router) {
         db.prepare(
           'SELECT user_id, COALESCE(sum(calories), 0) AS kcal FROM meal_logs WHERE user_id IN (?, ?) AND date = ? GROUP BY user_id',
         ).bind(me, partner, date),
-        db.prepare('SELECT user_id, count(*) AS n FROM plan_exercises WHERE user_id IN (?, ?) AND weekday = ? GROUP BY user_id').bind(
+        db.prepare(
+          `SELECT p.user_id, count(*) AS n FROM plan_exercises p
+           WHERE p.user_id IN (?1, ?2)
+             AND p.weekday = COALESCE((SELECT same_as FROM plan_days d WHERE d.user_id = p.user_id AND d.weekday = ?3), ?3)
+           GROUP BY p.user_id`,
+        ).bind(
           me,
           partner,
           weekdayOf(date),
