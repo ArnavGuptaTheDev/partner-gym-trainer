@@ -1,0 +1,9 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import ChatView from '../islands/ChatView';
+import { chat } from '../content/copy';
+---
+<AppLayout title={chat.title} tab="chat">
+  <h1 class="sr-only">{chat.title}</h1>
+  <ChatView client:load />
+</AppLayout>

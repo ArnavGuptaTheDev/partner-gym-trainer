@@ -243,6 +243,24 @@ export const photos = {
   photoAlt: (who: string, date: string) => `${who}’s gym photo from ${date}`,
 };
 
+export const chat = {
+  title: 'Chat',
+  unpaired: 'Pair up with your partner to start chatting.',
+  pairCta: 'Go to pairing',
+  empty: (name: string) => `Say hi to ${name}! 👋`,
+  placeholder: 'Message…',
+  messageLabel: 'Message',
+  send: 'Send',
+  attach: 'Attach photo',
+  attaching: 'Uploading photo…',
+  loadOlder: 'Load older messages',
+  seen: 'Seen',
+  you: 'You',
+  emojiLabel: 'Quick emoji',
+  emoji: ['💪', '🔥', '❤️', '😂', '🥵', '👏', '🏋️', '🥗', '😴', '🎉'],
+  photoAlt: (name: string) => `Photo from ${name}`,
+};
+
 export const settings = {
   themeTitle: 'Theme',
   themeSystem: 'Auto',

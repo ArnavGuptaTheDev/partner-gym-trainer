@@ -364,6 +364,26 @@ legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding: 0; }
 .compare figure { margin: 0; text-align: center; }
 .compare img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 6px; }
 
+/* ---------- Chat ---------- */
+
+.chat { display: flex; flex-direction: column; gap: 8px; height: calc(100dvh - var(--tabbar-h) - 150px - env(safe-area-inset-bottom)); min-height: 320px; }
+.chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; overscroll-behavior: contain; }
+.chat-day { align-self: center; font-size: 0.75rem; color: var(--text-soft); margin: 10px 0 4px; }
+.bubble {
+  max-width: 78%; align-self: flex-start; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px 18px 18px 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  overflow-wrap: anywhere;
+}
+.bubble--mine { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-color: transparent; border-radius: 18px 18px 6px 18px; }
+.bubble--emoji { background: transparent; border-color: transparent; font-size: 2.2rem; padding: 0 4px; }
+.bubble--emoji .bubble-time { color: var(--text-soft); }
+.bubble img { border-radius: 12px; max-height: 260px; object-fit: cover; }
+.bubble-text { white-space: pre-wrap; }
+.bubble-time { font-size: 0.7rem; opacity: 0.8; align-self: flex-end; }
+.chat-composer { display: flex; gap: 6px; align-items: flex-end; }
+.chat-composer textarea { min-height: 46px; max-height: 120px; resize: none; border-radius: 22px; padding: 11px 16px; }
+.icon-btn:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }

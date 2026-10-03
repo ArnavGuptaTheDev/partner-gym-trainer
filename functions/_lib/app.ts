@@ -9,6 +9,8 @@ import { registerProfileRoutes } from './routes/profile';
 import { registerPlanRoutes } from './routes/plan';
 import { registerLogRoutes } from './routes/log';
 import { registerPhotoRoutes } from './routes/photos';
+import { registerChatRoutes } from './routes/chat';
+import { registerSocialRoutes } from './routes/social';
 
 export const router = new Router();
 registerAuthRoutes(router);
@@ -18,6 +20,8 @@ registerProfileRoutes(router);
 registerPlanRoutes(router);
 registerLogRoutes(router);
 registerPhotoRoutes(router);
+registerChatRoutes(router);
+registerSocialRoutes(router);
 
 export async function handle(req: Request, env: Env, waitUntil: (p: Promise<unknown>) => void = () => {}): Promise<Response> {
   const url = new URL(req.url);

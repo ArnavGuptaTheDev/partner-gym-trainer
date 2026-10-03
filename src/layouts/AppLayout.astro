@@ -36,8 +36,33 @@ const tabs = [
     </ul>
   </nav>
   <script>
-    import { getMe } from '../lib/api';
+    import { get, getMe } from '../lib/api';
+
     // Auth guard: every app page needs a session; api() redirects on 401.
     getMe().catch(() => {});
+
+    // Unread badge: poll a tiny endpoint every 30 s while the tab is visible.
+    const badge = document.querySelector<HTMLElement>('[data-unread]');
+    const chatLink = document.querySelector<HTMLAnchorElement>('[data-tab="chat"]');
+    const show = (n: number) => {
+      if (!badge || !chatLink) return;
+      badge.hidden = n === 0;
+      badge.textContent = n > 9 ? '9+' : String(n);
+      chatLink.setAttribute('aria-label', n ? `Chat, ${n} unread` : 'Chat');
+    };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      clearTimeout(timer);
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const p = await get<{ unread: number }>('/api/pulse');
+        show(p.unread);
+        window.dispatchEvent(new CustomEvent('spotter:pulse', { detail: p }));
+      } catch {}
+      timer = setTimeout(tick, 30_000);
+    };
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('spotter:unread', (e) => show((e as CustomEvent<number>).detail));
+    tick();
   </script>
 </BaseLayout>
