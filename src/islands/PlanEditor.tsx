@@ -6,7 +6,8 @@ import { parseLegacyReps, setsRepsLabel, uploadPlanMedia, type PlanDay, type Pla
 import { dayLong, dayShort, fromDisplayWeight, num, toDisplayWeight, WEEK, weightUnit, type Units } from '../lib/units';
 import ExerciseIcon, { ICON_LABELS } from './ExerciseIcon';
 import MediaPicker from './MediaPicker';
-import type { Meal, PlanData } from './PlanView';
+import DietEditor, { dietBody, initialDiet } from './DietEditor';
+import type { PlanData } from './PlanView';
 import { ErrorNote, type Who } from './ui';
 
 type Mode = 'workout' | 'same' | 'rest';
@@ -71,7 +72,7 @@ export default function PlanEditor({ data, units, who, startDay, onCancel, onSav
   const [protein, setProtein] = useState(p?.proteinG?.toString() ?? '');
   const [carbs, setCarbs] = useState(p?.carbsG?.toString() ?? '');
   const [fat, setFat] = useState(p?.fatG?.toString() ?? '');
-  const [meals, setMeals] = useState<Meal[]>(data.meals.length ? data.meals : [{ name: 'Breakfast', items: '', notes: '' }]);
+  const [diet, setDiet] = useState(() => initialDiet(data.meals, p));
   const [days, setDays] = useState(() => initialDays(data.days));
   const [exercises, setExercises] = useState<EditEx[]>(() => data.exercises.map(toEditable));
   const [day, setDay] = useState(startDay);
@@ -158,7 +159,7 @@ export default function PlanEditor({ data, units, who, startDay, onCancel, onSav
           restMessage: s.mode === 'rest' ? s.restMessage.trim() : '',
           sameAs: s.mode === 'same' ? s.sameAs : null,
         })),
-      meals: meals.filter((m) => m.name.trim()).map((m) => ({ id: m.id, name: m.name, items: m.items, notes: m.notes })),
+      ...dietBody(diet),
       exercises: exercises
         .filter((e) => e.name.trim() && days[e.weekday].mode === 'workout')
         .map((e) => ({
@@ -330,24 +331,7 @@ export default function PlanEditor({ data, units, who, startDay, onCancel, onSav
         </div>
       </section>
 
-      <section class="card stack" aria-labelledby="ed-meals">
-        <h2 id="ed-meals">{t.mealsTitle}</h2>
-        {meals.map((m, i) => (
-          <fieldset class="editor-item stack" key={m.id ?? `new-${i}`}>
-            <legend class="sr-only">{`${t.mealName} ${i + 1}`}</legend>
-            <TextField id={`m-name-${i}`} label={t.mealName} value={m.name} max={60} set={(v) => setMeals(meals.map((x, j) => (j === i ? { ...x, name: v } : x)))} />
-            <div class="field">
-              <label for={`m-items-${i}`}>{t.mealItems}</label>
-              <textarea id={`m-items-${i}`} value={m.items} maxLength={1000} onInput={(e) => { const v = e.currentTarget.value; setMeals(meals.map((x, j) => (j === i ? { ...x, items: v } : x))); }} />
-            </div>
-            <TextField id={`m-notes-${i}`} label={t.notes} value={m.notes} max={500} set={(v) => setMeals(meals.map((x, j) => (j === i ? { ...x, notes: v } : x)))} />
-            <button class="btn btn--small btn--danger" type="button" onClick={() => setMeals(meals.filter((_, j) => j !== i))} style="align-self:flex-start">{t.remove}</button>
-          </fieldset>
-        ))}
-        {meals.length < 12 && (
-          <button class="btn btn--ghost" type="button" onClick={() => setMeals([...meals, { name: '', items: '', notes: '' }])}>+ {t.addMeal}</button>
-        )}
-      </section>
+      <DietEditor diet={diet} set={setDiet} />
 
       <ErrorNote>{error}</ErrorNote>
       <div class="sticky-actions">

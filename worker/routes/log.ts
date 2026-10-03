@@ -4,7 +4,7 @@ import { badRequest, conflict, json, notFound, readJson } from '../http';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { parse, v } from '../validate';
-import { dayView, exerciseView } from './plan';
+import { dayView, exerciseView, mealView } from './plan';
 import { weightStatements } from './profile';
 
 export const DEFAULT_WATER_TARGET_ML = 2500;
@@ -105,7 +105,7 @@ async function loadDay(c: Ctx, date: string) {
        FROM plans WHERE user_id = ?`,
     ).bind(uid),
     db.prepare(`SELECT * FROM plan_exercises WHERE user_id = ?1 AND weekday = ${effective} ORDER BY position`).bind(uid, wd),
-    db.prepare('SELECT id, name, items, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(uid),
+    db.prepare('SELECT id, time_label, name, items, items_json, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(uid),
     db.prepare(`SELECT ${exerciseCols} FROM exercise_logs WHERE user_id = ? AND date = ? ORDER BY created_at`).bind(uid, date),
     db.prepare(`SELECT ${mealCols} FROM meal_logs WHERE user_id = ? AND date = ? ORDER BY created_at`).bind(uid, date),
     db.prepare('SELECT calories_burned AS caloriesBurned, water_ml AS waterMl FROM day_logs WHERE user_id = ? AND date = ?').bind(uid, date),
@@ -140,7 +140,7 @@ async function loadDay(c: Ctx, date: string) {
       sameAs: own?.sameAs ?? null,
     },
     plannedExercises: planned,
-    plannedMeals: plannedMeals.results,
+    plannedMeals: (plannedMeals.results as Record<string, any>[]).map(mealView),
     exercises,
     meals,
     caloriesBurned: dayRow?.caloriesBurned ?? null,

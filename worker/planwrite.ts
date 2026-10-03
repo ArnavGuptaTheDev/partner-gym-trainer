@@ -16,6 +16,12 @@ export const PlanBody = v.object({
   tagline: v.optional(v.string({ max: 140 })),
   calorieTarget: v.optional(v.nullable(v.number({ min: 0, max: 10000, int: true }))),
   calorieGoal: v.enum(['deficit', 'surplus', 'maintain'] as const),
+  dietTitle: v.optional(v.string({ max: 60 })),
+  dietIntro: v.optional(v.string({ max: 300 })),
+  dietTips: v.optional(v.string({ max: 2000 })),
+  stock: v.optional(
+    v.array(v.object({ emoji: v.optional(v.string({ max: 16 })), label: v.string({ min: 1, max: 40 }) }), { max: 40 }),
+  ),
   proteinG: macro,
   carbsG: macro,
   fatG: macro,
@@ -35,8 +41,19 @@ export const PlanBody = v.object({
   meals: v.array(
     v.object({
       id,
+      /** Time slot, e.g. "Early morning". */
+      timeLabel: v.optional(v.string({ max: 30 })),
+      /** Heading, e.g. "Wake up". */
       name: v.string({ min: 1, max: 60 }),
-      items: v.string({ max: 1000 }),
+      /** Structured items; each may list alternatives ("OR 3-4 boiled eggs"). */
+      itemList: v.optional(
+        v.array(
+          v.object({ text: v.string({ min: 1, max: 200 }), or: v.optional(v.array(v.string({ min: 1, max: 200 }), { max: 4 })) }),
+          { max: 20 },
+        ),
+      ),
+      /** Free text, used only when itemList is absent (older clients). */
+      items: v.optional(v.string({ max: 1000 })),
       notes: v.optional(v.string({ max: 500 })),
     }),
     { max: 12 },
@@ -107,6 +124,30 @@ export function checkPlanRules(b: PlanInput) {
   });
 }
 
+export interface MealItem {
+  text: string;
+  or: string[];
+}
+
+/** "Oats" + "OR 3-4 boiled eggs" on separate lines: the free-text form of a list. */
+export const flattenItems = (list: MealItem[]) => list.map((it) => [it.text, ...it.or.map((o) => `OR ${o}`)].join('\n')).join('\n');
+
+/** Item list for a meal row: structured if saved that way, else one item per line. */
+export function mealItems(itemsJson: string | null, items: string): MealItem[] {
+  if (itemsJson) {
+    try {
+      return JSON.parse(itemsJson);
+    } catch {
+      /* fall through to text */
+    }
+  }
+  return items
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((text) => ({ text, or: [] }));
+}
+
 export const mediaIdsOf = (b: PlanInput) => b.exercises.flatMap((e) => e.mediaIds ?? []);
 
 export interface Stmt {
@@ -133,7 +174,20 @@ export function planWriteStatements(opts: {
 }): Stmt[] {
   const { userId, editorId, body: b, now, newId } = opts;
 
-  const meals = b.meals.map((m, i) => ({ id: m.id ?? newId(), position: i, name: m.name, items: m.items, notes: m.notes ?? '' }));
+  const meals = b.meals.map((m, i) => {
+    const list = m.itemList?.map((it) => ({ text: it.text, or: it.or ?? [] }));
+    return {
+      id: m.id ?? newId(),
+      position: i,
+      timeLabel: m.timeLabel ?? '',
+      name: m.name,
+      // A flattened copy keeps the free-text column meaningful (e.g. logged meals).
+      items: list ? flattenItems(list) : (m.items ?? ''),
+      itemsJson: list ? JSON.stringify(list) : null,
+      notes: m.notes ?? '',
+    };
+  });
+  const stock = (b.stock ?? []).map((x) => ({ emoji: x.emoji?.trim() ?? '', label: x.label }));
   const counters = new Map<number, number>();
   const media: { id: string; ex: string; pos: number }[] = [];
   const exercises = b.exercises.map((e) => {
@@ -175,12 +229,17 @@ export function planWriteStatements(opts: {
 
   const stmts: Stmt[] = [
     {
-      sql: `INSERT INTO plans (user_id, calorie_target, calorie_goal, protein_g, carbs_g, fat_g, title, tagline, version, updated_by, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, ?10)
+      sql: `INSERT INTO plans (user_id, calorie_target, calorie_goal, protein_g, carbs_g, fat_g, title, tagline,
+                               diet_title, diet_intro, diet_tips, stock_json, version, updated_by, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?11, ?12, ?13, ?14, 1, ?9, ?10)
             ON CONFLICT(user_id) DO UPDATE SET
               calorie_target = ?2, calorie_goal = ?3, protein_g = ?4, carbs_g = ?5, fat_g = ?6, title = ?7, tagline = ?8,
+              diet_title = ?11, diet_intro = ?12, diet_tips = ?13, stock_json = ?14,
               version = version + 1, updated_by = ?9, updated_at = ?10`,
-      params: [userId, b.calorieTarget ?? null, b.calorieGoal, b.proteinG ?? null, b.carbsG ?? null, b.fatG ?? null, b.title ?? '', b.tagline ?? '', editorId, now],
+      params: [
+        userId, b.calorieTarget ?? null, b.calorieGoal, b.proteinG ?? null, b.carbsG ?? null, b.fatG ?? null, b.title ?? '', b.tagline ?? '',
+        editorId, now, b.dietTitle ?? '', b.dietIntro ?? '', b.dietTips ?? '', J(stock),
+      ],
     },
     { sql: 'DELETE FROM plan_days WHERE user_id = ?1', params: [userId] },
     {
@@ -195,12 +254,13 @@ export function planWriteStatements(opts: {
       params: [userId, J(meals)],
     },
     {
-      sql: `INSERT INTO plan_meals (id, user_id, position, name, items, notes)
-            SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.position'), json_extract(value, '$.name'),
-                   json_extract(value, '$.items'), json_extract(value, '$.notes')
+      sql: `INSERT INTO plan_meals (id, user_id, position, time_label, name, items, items_json, notes)
+            SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.position'), json_extract(value, '$.timeLabel'),
+                   json_extract(value, '$.name'), json_extract(value, '$.items'), json_extract(value, '$.itemsJson'),
+                   json_extract(value, '$.notes')
             FROM json_each(?2) WHERE true
-            ON CONFLICT(id) DO UPDATE SET position = excluded.position, name = excluded.name,
-              items = excluded.items, notes = excluded.notes
+            ON CONFLICT(id) DO UPDATE SET position = excluded.position, time_label = excluded.time_label, name = excluded.name,
+              items = excluded.items, items_json = excluded.items_json, notes = excluded.notes
             WHERE plan_meals.user_id = excluded.user_id`,
       params: [userId, J(meals)],
     },

@@ -228,3 +228,63 @@ describe('exercise photos', () => {
     expect(res.data.totalBytes).toBeGreaterThanOrEqual(res.data.planMediaBytes);
   });
 });
+
+describe('richer diet plans', () => {
+  const diet = {
+    dietTitle: 'Weight Gain Diet',
+    dietIntro: 'Simple home food, eaten consistently.',
+    dietTips: 'Eat every 3 hours.',
+    stock: [{ emoji: '🍌', label: 'Bananas' }, { label: 'Oats' }],
+    meals: [
+      {
+        timeLabel: 'Breakfast',
+        name: '~1 hour later',
+        itemList: [{ text: 'Bowl of oats cooked in milk', or: ['3-4 boiled eggs with toast'] }, { text: 'A glass of milk' }],
+      },
+      { timeLabel: 'Before bed', name: 'Last thing at night', itemList: [{ text: 'Warm glass of milk' }] },
+    ],
+  };
+
+  it('stores time labels, items with alternatives, stock chips, tips and header', async () => {
+    const { a, b } = await newPair();
+    expect((await api('PUT', '/api/u/partner/plan', { cookie: a.cookie, body: plan(diet) })).status).toBe(200);
+    const got = await api('GET', '/api/u/me/plan', { cookie: b.cookie });
+    expect(got.data.plan).toMatchObject({
+      dietTitle: 'Weight Gain Diet', dietIntro: 'Simple home food, eaten consistently.', dietTips: 'Eat every 3 hours.',
+      stock: [{ emoji: '🍌', label: 'Bananas' }, { emoji: '', label: 'Oats' }],
+    });
+    expect(got.data.meals[0]).toMatchObject({
+      timeLabel: 'Breakfast',
+      name: '~1 hour later',
+      itemList: [{ text: 'Bowl of oats cooked in milk', or: ['3-4 boiled eggs with toast'] }, { text: 'A glass of milk', or: [] }],
+      items: 'Bowl of oats cooked in milk\nOR 3-4 boiled eggs with toast\nA glass of milk',
+    });
+  });
+
+  it('logging a planned meal records its items as the description', async () => {
+    const { a, b } = await newPair();
+    await api('PUT', '/api/u/partner/plan', { cookie: a.cookie, body: plan(diet) });
+    const day = await api('GET', `/api/u/me/days/${MONDAY}`, { cookie: b.cookie });
+    expect(day.data.plannedMeals[1]).toMatchObject({ timeLabel: 'Before bed', itemList: [{ text: 'Warm glass of milk', or: [] }] });
+    await api('POST', `/api/u/me/days/${MONDAY}/meals`, { cookie: b.cookie, body: { planMealId: day.data.plannedMeals[0].id, calories: 500 } });
+    const after = await api('GET', `/api/u/me/days/${MONDAY}`, { cookie: b.cookie });
+    expect(after.data.meals[0].description).toContain('OR 3-4 boiled eggs with toast');
+  });
+
+  it('keeps older free-text meals readable as one item per line', async () => {
+    const { a, b } = await newPair();
+    await api('PUT', '/api/u/partner/plan', { cookie: a.cookie, body: plan({ meals: [{ name: 'Lunch', items: 'Rice\nDal\n\nSalad' }] }) });
+    const got = await api('GET', '/api/u/me/plan', { cookie: b.cookie });
+    expect(got.data.meals[0]).toMatchObject({ timeLabel: '', items: 'Rice\nDal\n\nSalad' });
+    expect(got.data.meals[0].itemList.map((i: any) => i.text)).toEqual(['Rice', 'Dal', 'Salad']);
+  });
+
+  it.each([
+    ['too many stock chips', { stock: Array.from({ length: 41 }, (_, i) => ({ label: `x${i}` })) }],
+    ['too many alternatives', { meals: [{ name: 'M', itemList: [{ text: 'a', or: ['1', '2', '3', '4', '5'] }] }] }],
+    ['empty stock label', { stock: [{ emoji: '🍌', label: '' }] }],
+  ])('rejects %s', async (_, over) => {
+    const { a } = await newPair();
+    expect((await api('PUT', '/api/u/partner/plan', { cookie: a.cookie, body: plan(over) })).status).toBe(400);
+  });
+});

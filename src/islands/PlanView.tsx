@@ -3,16 +3,24 @@ import { plan as t } from '../content/copy';
 import { get, type Me } from '../lib/api';
 import type { PlanDay, PlanExercise } from '../lib/plan';
 import { dayLong, dayShort, WEEK } from '../lib/units';
-import { DayHead, RestBox } from './DayBits';
+import { DayHead, MealItems, RestBox } from './DayBits';
 import ExerciseCard from './ExerciseCard';
 import PlanEditor from './PlanEditor';
 import { ErrorNote, Loading, useMe, useQueryState, WhoToggle, type Who } from './ui';
 
+import type { MealItem } from './DayBits';
+export type { MealItem };
 export interface Meal {
   id?: string;
+  timeLabel: string;
   name: string;
   items: string;
+  itemList: MealItem[];
   notes: string;
+}
+export interface StockItem {
+  emoji: string;
+  label: string;
 }
 export interface PlanData {
   plan: null | {
@@ -23,6 +31,10 @@ export interface PlanData {
     fatG: number | null;
     title: string;
     tagline: string;
+    dietTitle: string;
+    dietIntro: string;
+    dietTips: string;
+    stock: StockItem[];
     version: number;
     updatedAt: number;
     updatedByName: string | null;
@@ -161,6 +173,12 @@ function DietPanel({ data }: { data: PlanData }) {
   const p = data.plan!;
   return (
     <>
+      {(p.dietTitle || p.dietIntro) && (
+        <div class="day-head">
+          {p.dietTitle && <h2>{p.dietTitle}</h2>}
+          {p.dietIntro && <p>{p.dietIntro}</p>}
+        </div>
+      )}
       <section class="card stack" aria-labelledby="targets-h">
         <div class="spread">
           <h2 id="targets-h">{t.targetsTitle}</h2>
@@ -185,15 +203,38 @@ function DietPanel({ data }: { data: PlanData }) {
         ) : (
           <ul class="list">
             {data.meals.map((m) => (
-              <li key={m.id}>
-                <h3>{m.name}</h3>
-                <p style="margin:0;white-space:pre-line">{m.items}</p>
-                {m.notes && <p class="small muted" style="margin:4px 0 0">{m.notes}</p>}
+              <li key={m.id} class="meal">
+                {m.timeLabel && <div class="meal-time">{m.timeLabel}</div>}
+                <div class="meal-body">
+                  <h3>{m.name}</h3>
+                  <MealItems items={m.itemList} />
+                  {m.notes && <p class="small muted" style="margin:4px 0 0">{m.notes}</p>}
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {p.stock.length > 0 && (
+        <section class="stack" aria-labelledby="stock-h">
+          <h2 id="stock-h" class="section-title">{t.stockTitle}</h2>
+          <ul class="stock-chips">
+            {p.stock.map((s) => (
+              <li key={s.label} class="stock-chip">
+                {s.emoji && <span aria-hidden="true">{s.emoji} </span>}
+                {s.label}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {p.dietTips && (
+        <aside class="tip-box" aria-label={t.tipsTitle}>
+          <strong>{t.tipsTitle}:</strong> <span style="white-space:pre-line">{p.dietTips}</span>
+        </aside>
+      )}
     </>
   );
 }

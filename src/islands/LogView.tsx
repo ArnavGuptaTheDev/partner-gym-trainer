@@ -3,13 +3,13 @@ import { log as t, plan as planCopy } from '../content/copy';
 import { ApiError, del, get, patch, post, today, type Me } from '../lib/api';
 import { fmtWeight, fromDisplayWeight, num, toDisplayWeight, weightUnit, type Units } from '../lib/units';
 import type { PlanExercise } from '../lib/plan';
-import { DayHead, RestBox } from './DayBits';
+import { DayHead, MealItems, RestBox } from './DayBits';
 import ExerciseCard from './ExerciseCard';
 import { ErrorNote, Loading, useMe, useQueryState, WhoToggle, type Who } from './ui';
 
 type PlannedExercise = PlanExercise & { id: string };
 interface ExerciseLog { id: string; planExerciseId: string | null; name: string; equipment: string; sets: number | null; reps: string; weightKg: number | null; done: boolean }
-interface PlannedMeal { id: string; name: string; items: string; notes: string }
+interface PlannedMeal { id: string; timeLabel: string; name: string; items: string; itemList: { text: string; or: string[] }[]; notes: string }
 interface MealLog { id: string; planMealId: string | null; name: string; description: string; calories: number | null }
 interface Day {
   date: string;
@@ -136,8 +136,11 @@ function DayLog({ who, date, me }: { who: Who; date: string; me: Me }) {
               <li key={m.id} class="stack" style="gap:6px">
                 <div class="spread">
                   <span>
+                    {m.timeLabel && <span class="meal-time" style="display:block;padding:0">{m.timeLabel}</span>}
                     <strong>{m.name}</strong>
-                    <span class="small muted" style="display:block;white-space:pre-line">{m.items}</span>
+                    <span class="small muted" style="display:block">
+                      <MealItems items={m.itemList} />
+                    </span>
                   </span>
                   {logged ? (
                     <span class="row" style="gap:2px">

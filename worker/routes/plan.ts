@@ -1,6 +1,6 @@
 import { randomId } from '../crypto';
 import { badRequest, conflict, HttpError, json, notFound, readJson } from '../http';
-import { checkPlanRules, mediaIdsOf, PlanBody, planWriteStatements } from '../planwrite';
+import { checkPlanRules, mealItems, mediaIdsOf, PlanBody, planWriteStatements } from '../planwrite';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { extFor, intField, readImageUpload, streamImage } from '../upload';
@@ -75,6 +75,19 @@ export function exerciseView(e: ExerciseRow, media: MediaRow[]) {
   };
 }
 
+function safeJson<T>(raw: string | null | undefined, fallback: T): T {
+  try {
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Meal shape returned to clients (plan view and the daily log). */
+export function mealView(m: Record<string, any>) {
+  return { id: m.id, timeLabel: m.time_label ?? '', name: m.name, items: m.items, itemList: mealItems(m.items_json ?? null, m.items ?? ''), notes: m.notes };
+}
+
 export function dayView(d: Record<string, any>) {
   return { weekday: d.weekday, title: d.title, note: d.note, isRest: !!d.is_rest, restMessage: d.rest_message, sameAs: d.same_as };
 }
@@ -83,23 +96,29 @@ export async function loadPlan(db: D1Database, userId: string) {
   const [plan, meals, exercises, days, media] = await db.batch([
     db.prepare(
       `SELECT p.calorie_target AS calorieTarget, p.calorie_goal AS calorieGoal, p.protein_g AS proteinG,
-              p.carbs_g AS carbsG, p.fat_g AS fatG, p.title, p.tagline, p.version, p.updated_at AS updatedAt,
+              p.carbs_g AS carbsG, p.fat_g AS fatG, p.title, p.tagline, p.diet_title AS dietTitle, p.diet_intro AS dietIntro,
+              p.diet_tips AS dietTips, p.stock_json AS stockJson, p.version, p.updated_at AS updatedAt,
               p.updated_by AS updatedById, u.display_name AS updatedByName
        FROM plans p LEFT JOIN users u ON u.id = p.updated_by WHERE p.user_id = ?`,
     ).bind(userId),
-    db.prepare('SELECT id, name, items, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(userId),
+    db.prepare('SELECT id, time_label, name, items, items_json, notes FROM plan_meals WHERE user_id = ? ORDER BY position').bind(userId),
     db.prepare('SELECT * FROM plan_exercises WHERE user_id = ? ORDER BY weekday, position').bind(userId),
     db.prepare('SELECT * FROM plan_days WHERE user_id = ? ORDER BY weekday').bind(userId),
     db.prepare(
       'SELECT id, plan_exercise_id, width, height FROM plan_media WHERE user_id = ? AND plan_exercise_id IS NOT NULL ORDER BY position',
     ).bind(userId),
   ]);
-  const p = (plan.results[0] as Record<string, unknown> | undefined) ?? null;
+  const row = (plan.results[0] as Record<string, unknown> | undefined) ?? null;
+  let p: Record<string, unknown> | null = null;
+  if (row) {
+    const { stockJson, ...rest } = row;
+    p = { ...rest, stock: safeJson(stockJson as string, []) };
+  }
   const m = media.results as MediaRow[];
   return {
     plan: p,
     days: (days.results as Record<string, any>[]).map(dayView),
-    meals: meals.results,
+    meals: (meals.results as Record<string, any>[]).map(mealView),
     exercises: (exercises.results as ExerciseRow[]).map((e) => exerciseView(e, m)),
   };
 }
