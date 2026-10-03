@@ -42,6 +42,7 @@ export const auth = {
   inviteOnlyLead:
     'There’s no Spotter account for that Google login, and no valid invite came with it. Ask whoever runs your Spotter for an invite link and open it on this device.',
   backToSignIn: 'Back to sign in',
+  deleted: 'Your account and all of its data have been deleted. Take care! 👋',
   devTitle: 'Dev login',
   devLead: 'Local development only. Enabled by DEV_LOGIN=true on localhost.',
   devEmail: 'Seeded user email',
@@ -504,4 +505,14 @@ export const settings = {
   themeSystem: 'Auto',
   themeLight: 'Light',
   themeDark: 'Dark',
+  deleteTitle: 'Delete account',
+  deleteLead:
+    'Permanently deletes your account and everything in it: profile, weights, plans, logs, photos and messages. If you’re paired, you’ll be unpaired and your shared chat goes too. This can’t be undone.',
+  deleteLearnMore: 'What gets deleted',
+  deleteButton: 'Delete my account…',
+  deleteConfirm1: 'Delete your Spotter account and all of its data? This cannot be undone.',
+  deleteFinalWarning: 'Last step. Your data will be deleted immediately and can’t be recovered.',
+  deleteTypeLabel: (phrase: string) => `Type ${phrase} to confirm`,
+  deleteCancel: 'Keep my account',
+  deleteFinal: 'Permanently delete',
 };

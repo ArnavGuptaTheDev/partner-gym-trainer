@@ -10,6 +10,7 @@ import { auth } from '../content/copy';
     <p class="muted">{auth.loginLead}</p>
   </div>
   <div class="card stack">
+    <p class="alert alert--ok" role="status" id="deleted"></p>
     <p class="alert alert--error" role="alert" id="error"></p>
     <GoogleButton id="google" />
     <p class="center muted small" style="margin:0">{auth.inviteOnlyNote}</p>
@@ -35,6 +36,7 @@ import { auth } from '../content/copy';
   const next = params.get('next');
   const code = params.get('error');
   if (code) document.getElementById('error')!.textContent = auth.errors[code] ?? auth.errors.google;
+  if (params.has('deleted')) document.getElementById('deleted')!.textContent = auth.deleted;
   // Carried through to the server, which validates it again.
   if (next) (document.getElementById('google') as HTMLAnchorElement).href = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
 

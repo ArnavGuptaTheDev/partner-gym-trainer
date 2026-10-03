@@ -487,6 +487,8 @@ legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding: 0; }
 .meal-or-edit { padding-left: 16px; }
 .meal-item-edit { gap: 6px; }
 
+.danger-zone { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
 /* ---------- Plan editor ---------- */
 
 .ex-edit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

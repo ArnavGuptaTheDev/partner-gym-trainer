@@ -11,6 +11,7 @@ import { registerLogRoutes } from './routes/log';
 import { registerPhotoRoutes } from './routes/photos';
 import { registerChatRoutes } from './routes/chat';
 import { registerSocialRoutes } from './routes/social';
+import { registerAccountRoutes } from './routes/account';
 
 export const router = new Router();
 registerAuthRoutes(router);
@@ -22,6 +23,7 @@ registerLogRoutes(router);
 registerPhotoRoutes(router);
 registerChatRoutes(router);
 registerSocialRoutes(router);
+registerAccountRoutes(router);
 
 export async function handle(req: Request, env: Env, waitUntil: (p: Promise<unknown>) => void = () => {}): Promise<Response> {
   const url = new URL(req.url);

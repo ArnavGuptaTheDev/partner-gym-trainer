@@ -2,6 +2,7 @@
 import AppLayout from '../layouts/AppLayout.astro';
 import PairingPanel from '../islands/PairingPanel';
 import { auth, nav, settings } from '../content/copy';
+import { DELETE_CONFIRMATION } from '../../shared/account';
 ---
 <AppLayout title={nav.settings}>
   <h1>{nav.settings}</h1>
@@ -34,11 +35,30 @@ import { auth, nav, settings } from '../content/copy';
       <strong>{nav.admin}</strong><span aria-hidden="true">→</span>
     </a>
     <button class="btn btn--ghost btn--block" type="button" id="logout">{auth.logout}</button>
+
+    <section class="card stack danger-zone" aria-labelledby="delete-h">
+      <h2 id="delete-h">{settings.deleteTitle}</h2>
+      <p class="small muted" style="margin:0">{settings.deleteLead} <a href="/privacy#deletion">{settings.deleteLearnMore}</a></p>
+      <button class="btn btn--danger" type="button" id="delete-start">{settings.deleteButton}</button>
+      <form class="stack" id="delete-form" hidden>
+        <p class="alert alert--error" style="margin:0">{settings.deleteFinalWarning}</p>
+        <div class="field">
+          <label for="delete-confirm">{settings.deleteTypeLabel(DELETE_CONFIRMATION)}</label>
+          <input id="delete-confirm" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        </div>
+        <p class="alert alert--error" role="alert" id="delete-error"></p>
+        <div class="row">
+          <button class="btn btn--ghost" type="button" id="delete-cancel">{settings.deleteCancel}</button>
+          <button class="btn btn--danger" type="submit" id="delete-submit" disabled>{settings.deleteFinal}</button>
+        </div>
+      </form>
+    </section>
   </div>
 </AppLayout>
 
 <script>
-  import { getMe, patch, post } from '../lib/api';
+  import { api, getMe, patch, post } from '../lib/api';
+  import { DELETE_CONFIRMATION } from '../../shared/account';
   import { settings } from '../content/copy';
 
   const saved = (() => { try { return localStorage.getItem('spotter-theme'); } catch { return null; } })() ?? 'system';
@@ -72,5 +92,37 @@ import { auth, nav, settings } from '../content/copy';
   document.getElementById('logout')!.addEventListener('click', async () => {
     await post('/api/auth/logout').catch(() => {});
     location.href = '/login';
+  });
+
+  // Account deletion: a confirm dialog, then typing the exact phrase.
+  const delStart = document.getElementById('delete-start') as HTMLButtonElement;
+  const delForm = document.getElementById('delete-form') as HTMLFormElement;
+  const delInput = document.getElementById('delete-confirm') as HTMLInputElement;
+  const delSubmit = document.getElementById('delete-submit') as HTMLButtonElement;
+  const delError = document.getElementById('delete-error')!;
+  delStart.addEventListener('click', () => {
+    if (!confirm(settings.deleteConfirm1)) return;
+    delStart.hidden = true;
+    delForm.hidden = false;
+    delInput.focus();
+  });
+  document.getElementById('delete-cancel')!.addEventListener('click', () => {
+    delForm.hidden = true;
+    delStart.hidden = false;
+    delInput.value = '';
+    delSubmit.disabled = true;
+  });
+  delInput.addEventListener('input', () => (delSubmit.disabled = delInput.value.trim() !== DELETE_CONFIRMATION));
+  delForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    delError.textContent = '';
+    delSubmit.disabled = true;
+    try {
+      await api('DELETE', '/api/account', { confirm: delInput.value.trim() });
+      location.href = '/login?deleted=1';
+    } catch (err) {
+      delError.textContent = err instanceof Error ? err.message : String(err);
+      delSubmit.disabled = false;
+    }
   });
 </script>
