@@ -4,6 +4,7 @@ import { chat as t } from '../content/copy';
 import { ApiError, get, post, type Me } from '../lib/api';
 import { useVisiblePolling } from '../lib/hooks';
 import { uploadPhoto } from '../lib/photos';
+import MediaPicker from './MediaPicker';
 import { ErrorNote, Loading, useMe } from './ui';
 
 interface Message { id: number; senderId: string; body: string; photoUrl: string | null; createdAt: number }
@@ -37,6 +38,7 @@ function Conversation({ me }: { me: Me }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState<'' | 'send' | 'photo'>('');
   const [error, setError] = useState('');
+  const [attaching, setAttaching] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const lastId = messages.length ? messages[messages.length - 1].id : 0;
@@ -126,8 +128,10 @@ function Conversation({ me }: { me: Me }) {
       const photo = await uploadPhoto(file, 'chat');
       await send({ photoId: photo.id, body: text.trim() || undefined });
       setText('');
+      setAttaching(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      throw e; // keeps the preview so they can retry
     } finally {
       setBusy('');
     }
@@ -167,12 +171,15 @@ function Conversation({ me }: { me: Me }) {
           <button key={e} type="button" class="chip" aria-label={`Send ${e}`} onClick={() => send({ body: e })}>{e}</button>
         ))}
       </div>
+      {attaching && (
+        <div class="card card--soft" style="padding:10px">
+          <MediaPicker compact addLabel={t.attach} confirmLabel={t.sendPhoto} disabled={!!busy} onConfirm={attach} />
+        </div>
+      )}
       <form class="chat-composer" onSubmit={submit}>
-        <label class="icon-btn" title={t.attach}>
-          <span aria-hidden="true">{busy === 'photo' ? '⏳' : '📷'}</span>
-          <span class="sr-only">{busy === 'photo' ? t.attaching : t.attach}</span>
-          <input type="file" accept="image/*" class="sr-only" disabled={!!busy} onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f) attach(f); e.currentTarget.value = ''; }} />
-        </label>
+        <button class="icon-btn" type="button" aria-expanded={attaching} aria-label={attaching ? t.closeAttach : t.attach} title={t.attach} onClick={() => setAttaching(!attaching)}>
+          <span aria-hidden="true">{busy === 'photo' ? '⏳' : attaching ? '✕' : '📷'}</span>
+        </button>
         <label for="chat-input" class="sr-only">{t.messageLabel}</label>
         <textarea
           id="chat-input"

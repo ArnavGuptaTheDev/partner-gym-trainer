@@ -3,6 +3,7 @@ import { plan as planCopy, photos as t } from '../content/copy';
 import { ApiError, del, type Me } from '../lib/api';
 import { usePaged } from '../lib/hooks';
 import { uploadPhoto, type Photo } from '../lib/photos';
+import MediaPicker from './MediaPicker';
 import { ErrorNote, Loading, useMe, useQueryState, WhoToggle, type Who } from './ui';
 
 const fmtDay = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -108,63 +109,33 @@ function Timeline({ who, me }: { who: Who; me: Me }) {
 }
 
 function Uploader({ onUploaded }: { onUploaded: (p: Photo) => void }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const input = useRef<HTMLInputElement>(null);
-
-  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
-
-  async function submit(e: Event) {
-    e.preventDefault();
-    if (!file) return;
-    setBusy(true);
-    setError('');
-    try {
-      const p = await uploadPhoto(file, 'gym', caption.trim());
-      onUploaded(p);
-      setFile(null);
-      setPreview(null);
-      setCaption('');
-      if (input.current) input.current.value = '';
-    } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
-    <form class="card stack" onSubmit={submit}>
-      <label class="btn btn--block" style="position:relative">
-        📷 {t.add}
-        <input
-          ref={input}
-          type="file"
-          accept="image/*"
-          class="sr-only"
-          onChange={(e) => {
-            const f = e.currentTarget.files?.[0] ?? null;
-            setFile(f);
-            setPreview(f ? URL.createObjectURL(f) : null);
-          }}
-        />
-      </label>
-      {preview && (
-        <>
-          <img src={preview} alt="" style="border-radius:var(--radius-sm);max-height:280px;object-fit:cover;width:100%" />
-          <div class="field">
-            <label for="cap">{t.captionLabel}</label>
-            <input id="cap" value={caption} maxLength={200} placeholder={t.captionPlaceholder} onInput={(e) => setCaption(e.currentTarget.value)} />
-          </div>
-          <button class="btn btn--sun" type="submit" disabled={busy}>{busy ? t.adding : t.upload}</button>
-        </>
-      )}
+    <section class="card stack" aria-labelledby="add-photo-h">
+      <h2 id="add-photo-h">{t.add}</h2>
+      <MediaPicker
+        confirmLabel={t.upload}
+        onConfirm={async (file) => {
+          setError('');
+          try {
+            onUploaded(await uploadPhoto(file, 'gym', caption.trim()));
+            setCaption('');
+          } catch (err) {
+            setError(err instanceof ApiError || err instanceof Error ? err.message : String(err));
+            throw err;
+          }
+        }}
+      >
+        <div class="field">
+          <label for="cap">{t.captionLabel}</label>
+          <input id="cap" value={caption} maxLength={200} placeholder={t.captionPlaceholder} onInput={(e) => setCaption(e.currentTarget.value)} />
+        </div>
+      </MediaPicker>
       <ErrorNote>{error}</ErrorNote>
       <p class="small muted" style="margin:0">{t.privacyNote}</p>
-    </form>
+    </section>
   );
 }
 

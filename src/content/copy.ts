@@ -425,7 +425,6 @@ export const mediaPicker = {
 export const photos = {
   title: 'Photos',
   add: 'Add today’s gym photo',
-  adding: 'Shrinking & uploading…',
   captionLabel: 'Caption (optional)',
   captionPlaceholder: 'PR on squats!',
   upload: 'Post photo',
@@ -455,6 +454,8 @@ export const chat = {
   send: 'Send',
   attach: 'Attach photo',
   attaching: 'Uploading photo…',
+  sendPhoto: 'Send photo',
+  closeAttach: 'Close photo picker',
   loadOlder: 'Load older messages',
   seen: 'Seen',
   you: 'You',

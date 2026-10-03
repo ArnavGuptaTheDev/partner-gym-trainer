@@ -3,6 +3,7 @@
 // getUserMedia, no permission prompt) and "Choose from gallery". Desktops,
 // where capture is ignored, get a single "Add photo". Either way the user
 // previews the shot and confirms or retakes before anything uploads.
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { mediaPicker as t } from '../content/copy';
 
@@ -14,6 +15,10 @@ interface Props {
   addLabel?: string;
   /** Compact icon-style buttons (chat composer). */
   compact?: boolean;
+  /** Label for the confirm button, e.g. "Post photo". */
+  confirmLabel?: string;
+  /** Extra fields shown with the preview (e.g. a caption). */
+  children?: ComponentChildren;
 }
 
 export function useIsTouchDevice() {
@@ -28,7 +33,7 @@ export function useIsTouchDevice() {
   return touch;
 }
 
-export default function MediaPicker({ onConfirm, disabled, addLabel, compact }: Props) {
+export default function MediaPicker({ onConfirm, disabled, addLabel, compact, confirmLabel, children }: Props) {
   const touch = useIsTouchDevice();
   const camera = useRef<HTMLInputElement>(null);
   const gallery = useRef<HTMLInputElement>(null);
@@ -80,13 +85,14 @@ export default function MediaPicker({ onConfirm, disabled, addLabel, compact }: 
       <div class="media-preview stack" role="group" aria-label={t.previewLabel}>
         {inputs}
         <img src={preview} alt={t.previewAlt} />
+        {children}
         <div class="row">
           <button class={btn} type="button" disabled={busy} onClick={() => (source === 'camera' ? camera : gallery).current?.click()}>
             {source === 'camera' ? t.retake : t.chooseAnother}
           </button>
           <button class={btn} type="button" disabled={busy} onClick={clear}>{t.cancel}</button>
           <button class={compact ? 'btn btn--small' : 'btn'} type="button" disabled={busy} onClick={confirm} style="margin-left:auto">
-            {busy ? t.uploading : t.confirm}
+            {busy ? t.uploading : (confirmLabel ?? t.confirm)}
           </button>
         </div>
       </div>
