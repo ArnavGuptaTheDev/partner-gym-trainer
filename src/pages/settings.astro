@@ -7,6 +7,18 @@ import { auth, nav, settings } from '../content/copy';
   <h1>{nav.settings}</h1>
   <div class="stack">
     <PairingPanel client:load />
+    <form class="card stack" id="profile" aria-labelledby="profile-h">
+      <h2 id="profile-h">{settings.profileTitle}</h2>
+      <div class="field">
+        <label for="displayName">{settings.displayName}</label>
+        <div class="row">
+          <input id="displayName" name="displayName" maxlength="40" required autocomplete="nickname" />
+          <button class="btn" type="submit">{settings.save}</button>
+        </div>
+      </div>
+      <p class="alert alert--ok" role="status" id="profile-status"></p>
+      <a href="/progress">{settings.progressLink} →</a>
+    </form>
     <section class="card stack" aria-labelledby="theme-h">
       <h2 id="theme-h">{settings.themeTitle}</h2>
       <fieldset>
@@ -26,7 +38,8 @@ import { auth, nav, settings } from '../content/copy';
 </AppLayout>
 
 <script>
-  import { getMe, post } from '../lib/api';
+  import { getMe, patch, post } from '../lib/api';
+  import { settings } from '../content/copy';
 
   const saved = (() => { try { return localStorage.getItem('spotter-theme'); } catch { return null; } })() ?? 'system';
   const radios = document.querySelectorAll<HTMLInputElement>('#theme input');
@@ -40,7 +53,21 @@ import { auth, nav, settings } from '../content/copy';
     });
   });
 
-  getMe().then((m) => { if (m.user.isSuper) document.getElementById('admin-link')!.hidden = false; });
+  const nameInput = document.getElementById('displayName') as HTMLInputElement;
+  getMe().then((m) => {
+    if (m.user.isSuper) document.getElementById('admin-link')!.hidden = false;
+    nameInput.value = m.user.displayName;
+  });
+  document.getElementById('profile')!.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('profile-status')!;
+    try {
+      await patch('/api/u/me/profile', { displayName: nameInput.value, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+      status.textContent = settings.saved;
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : String(err);
+    }
+  });
 
   document.getElementById('logout')!.addEventListener('click', async () => {
     await post('/api/auth/logout').catch(() => {});

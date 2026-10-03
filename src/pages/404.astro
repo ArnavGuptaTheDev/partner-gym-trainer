@@ -1,0 +1,12 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { notFoundPage as t } from '../content/copy';
+---
+<BaseLayout title={t.title} bare>
+  <div class="auth-hero">
+    <div class="mark" aria-hidden="true">🤷</div>
+    <h1>{t.title}</h1>
+    <p class="muted">{t.lead}</p>
+    <a class="btn" href="/">{t.home}</a>
+  </div>
+</BaseLayout>

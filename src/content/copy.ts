@@ -373,7 +373,18 @@ export const chat = {
   photoAlt: (name: string) => `Photo from ${name}`,
 };
 
+export const notFoundPage = {
+  title: 'Skipped leg day?',
+  lead: 'This page doesn’t exist.',
+  home: 'Back to Home',
+};
+
 export const settings = {
+  profileTitle: 'Profile',
+  displayName: 'Display name',
+  save: 'Save',
+  saved: 'Saved ✓',
+  progressLink: 'Goal, weight & progress',
   themeTitle: 'Theme',
   themeSystem: 'Auto',
   themeLight: 'Light',
