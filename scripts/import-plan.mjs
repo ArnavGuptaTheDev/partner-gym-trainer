@@ -6,6 +6,8 @@
 //
 // Write (replaces that user's workout days, exercises, meals and diet):
 //   node scripts/import-plan.mjs <page.html> --user <email> --by <email> --remote --apply --yes
+// Add --fresh to also drop the existing calorie target/goal/macros (goal
+// becomes surplus, the rest empty) instead of keeping them.
 //
 // Uses the app's own parser, validation and SQL (bundled from shared/ and
 // worker/), so the result is exactly what a save from the editor would write.
@@ -28,6 +30,8 @@ const user = opt('--user')?.toLowerCase();
 const by = opt('--by')?.toLowerCase();
 const where = flag('--remote') ? '--remote' : flag('--local') ? '--local' : null;
 const apply = flag('--apply');
+// --fresh: don't keep the existing plan's calorie target/goal/macros either.
+const fresh = flag('--fresh');
 
 if (!file) {
   console.error('Usage: node scripts/import-plan.mjs <page.html> [--user <email> --by <email> --remote|--local] [--apply --yes]');
@@ -123,7 +127,11 @@ console.log(`Set by:   ${editor.display_name} <${editor.email}>`);
 console.log(`Paired:   ${pair ? `yes (${pair.pair_type})` : 'NO'}`);
 console.log(
   existing
-    ? `Existing plan v${existing.version}: ${counts.exercises} exercises, ${counts.meals} meals will be replaced. Calorie target/goal/macros are kept (${existing.calorie_target ?? '–'} kcal, ${existing.calorie_goal}).`
+    ? `Existing plan v${existing.version}: ${counts.exercises} exercises, ${counts.meals} meals will be replaced. ${
+        fresh
+          ? 'Calorie target/goal/macros are reset (--fresh): goal surplus, no target.'
+          : `Calorie target/goal/macros are kept (${existing.calorie_target ?? '–'} kcal, ${existing.calorie_goal}).`
+      }`
     : 'No existing plan; one will be created (goal: surplus, no calorie target).',
 );
 if (counts.linkedLogs) console.log(`${counts.linkedLogs} logged exercise(s) point at the current plan; they keep their history (names are snapshotted) but unlink from the old plan entries.`);
@@ -138,11 +146,15 @@ if (counts.media) {
 
 const body = parse(PlanBody, {
   ...parsed,
-  calorieTarget: existing?.calorie_target ?? null,
-  calorieGoal: existing?.calorie_goal ?? 'surplus',
-  proteinG: existing?.protein_g ?? null,
-  carbsG: existing?.carbs_g ?? null,
-  fatG: existing?.fat_g ?? null,
+  ...(fresh || !existing
+    ? { calorieTarget: null, calorieGoal: 'surplus', proteinG: null, carbsG: null, fatG: null }
+    : {
+        calorieTarget: existing.calorie_target,
+        calorieGoal: existing.calorie_goal,
+        proteinG: existing.protein_g,
+        carbsG: existing.carbs_g,
+        fatG: existing.fat_g,
+      }),
 });
 checkPlanRules(body);
 console.log('\nValidation: passes the same checks as the app.');
