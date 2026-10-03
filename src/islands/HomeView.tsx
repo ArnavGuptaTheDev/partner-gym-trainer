@@ -3,6 +3,7 @@ import { feed as f, home as t, tone as tones, type Tone } from '../content/copy'
 import { confetti } from '../lib/confetti';
 import { ApiError, del, get, post, put, today, type Me } from '../lib/api';
 import { fmtWeight, type Units } from '../lib/units';
+import PushPrompt from './PushPrompt';
 import { ErrorNote, Loading, useMe } from './ui';
 
 const REACTIONS = ['🔥', '💪', '❤️', '👏', '😍', '🤯'];
@@ -78,6 +79,8 @@ export default function HomeView() {
           <p class="display" style="font-size:1.25rem;margin:0;white-space:pre-line">“{data.noteForMe.body}”</p>
         </section>
       )}
+
+      {pair && <PushPrompt partnerName={pair.partner.displayName} />}
 
       <Streaks data={data} tn={tn} paired={!!pair} partnerName={pair?.partner.displayName ?? ''} />
 

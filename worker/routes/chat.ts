@@ -1,4 +1,6 @@
 import { badRequest, json, notFound, pageLimit, readJson } from '../http';
+import { pushText } from '../push/messages';
+import { notifyPartner } from '../push/send';
 import type { Router } from '../router';
 import type { Ctx, Pair } from '../types';
 import { parse, v } from '../validate';
@@ -96,6 +98,7 @@ export function registerChatRoutes(r: Router) {
       .first<MessageRow>();
     // Your own message counts as read.
     c.waitUntil(markRead(db, pair.id, c.user.id, row!.id));
+    notifyPartner(c, 'message', ({ hidePreviews }) => pushText.message(c.user.display_name, body, !!b.photoId, hidePreviews), { urgency: 'high' });
     return json(view(row!), { status: 201 });
   });
 

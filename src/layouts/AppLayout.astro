@@ -44,6 +44,12 @@ const tabs = [
     import { tone } from '../content/copy';
 
     // Auth guard: every app page needs a session; api() redirects on 401.
+    // Re-register this device's push subscription on every app load: rebinds
+    // it to the current session and recovers from rotated endpoints.
+    if ('Notification' in window && Notification.permission === 'granted') {
+      import('../lib/push').then((m) => m.resubscribeOnLoad()).catch(() => {});
+    }
+
     getMe()
       .then((me) => {
         // Show the Google avatar in place of the settings icon.

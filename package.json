@@ -13,7 +13,8 @@
     "db:migrate:local": "wrangler d1 migrations apply spotter --local",
     "db:migrate:remote": "wrangler d1 migrations apply spotter --remote",
     "db:seed:local": "node scripts/seed.mjs",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "astro build && wrangler deploy",
+    "vapid:keys": "node scripts/vapid-keys.mjs"
   },
   "type": "module",
   "dependencies": {

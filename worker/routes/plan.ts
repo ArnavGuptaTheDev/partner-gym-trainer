@@ -1,6 +1,8 @@
 import { randomId } from '../crypto';
 import { badRequest, conflict, HttpError, json, notFound, readJson } from '../http';
 import { checkPlanRules, mealItems, mediaIdsOf, PlanBody, planWriteStatements } from '../planwrite';
+import { pushText } from '../push/messages';
+import { notifyPartner } from '../push/send';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { extFor, intField, readImageUpload, streamImage } from '../upload';
@@ -171,6 +173,7 @@ export function registerPlanRoutes(r: Router) {
     const stmts = planWriteStatements({ userId, editorId: c.user.id, body: b, now: c.now, newId: randomId, deleteMediaIds: drop.map((m) => m.id) });
     await db.batch(stmts.map((s) => db.prepare(s.sql).bind(...s.params)));
     if (drop.length) await c.env.PHOTOS.delete(drop.map((m) => m.r2_key));
+    notifyPartner(c, 'plan', () => pushText.plan(c.user.display_name, c.isSelf));
 
     return json({ version: currentVersion + 1, warnings: planWarnings(b.calorieTarget) });
   });

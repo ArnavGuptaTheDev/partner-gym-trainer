@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addDays, isoDate } from '../worker/dates';
 import { DELETE_CONFIRMATION } from '../worker/routes/account';
+import { enablePush } from './push-helpers';
 import { api, env, finishOAuth, googleLogin, newUser, pairUp, startOAuth, uniqueEmail, uniqueSub, type TestUser } from './helpers';
 
 const TODAY = isoDate(Date.now());
@@ -68,6 +69,7 @@ describe('account deletion', () => {
 
     const b = await newUser('Partner');
     await pairUp(a, b, 'couple');
+    await enablePush(a); // a push subscription + notification settings
 
     // Fill every table A can appear in.
     await api('PATCH', '/api/u/me/profile', { cookie: a.cookie, body: { heightCm: 170, targetWeightKg: 60, startWeightKg: 70 } });

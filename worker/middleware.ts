@@ -67,8 +67,8 @@ export async function authenticate(c: Ctx): Promise<void> {
     c.partnerName = null;
   }
 
-  // Sliding expiry, written at most about twice a month per session.
-  if (expires_at - c.now < SESSION_RENEW_MS) {
+  // Sliding expiry: push it to now + 30 days, writing at most once a day.
+  if (expires_at < c.now + SESSION_TTL_MS - SESSION_RENEW_MS) {
     c.waitUntil(
       c.env.DB.prepare('UPDATE sessions SET expires_at = ?, last_seen_at = ? WHERE token_hash = ?')
         .bind(c.now + SESSION_TTL_MS, c.now, hash)

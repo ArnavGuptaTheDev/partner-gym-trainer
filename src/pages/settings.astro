@@ -1,6 +1,7 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
 import PairingPanel from '../islands/PairingPanel';
+import PushSettings from '../islands/PushSettings';
 import { auth, nav, settings } from '../content/copy';
 import { DELETE_CONFIRMATION } from '../../shared/account';
 ---
@@ -8,6 +9,7 @@ import { DELETE_CONFIRMATION } from '../../shared/account';
   <h1>{nav.settings}</h1>
   <div class="stack">
     <PairingPanel client:load />
+    <PushSettings client:load />
     <form class="card stack" id="profile" aria-labelledby="profile-h">
       <h2 id="profile-h">{settings.profileTitle}</h2>
       <div class="field">
@@ -58,6 +60,7 @@ import { DELETE_CONFIRMATION } from '../../shared/account';
 
 <script>
   import { api, getMe, patch, post } from '../lib/api';
+  import { unsubscribeThisDevice } from '../lib/push';
   import { DELETE_CONFIRMATION } from '../../shared/account';
   import { settings } from '../content/copy';
 
@@ -90,6 +93,8 @@ import { DELETE_CONFIRMATION } from '../../shared/account';
   });
 
   document.getElementById('logout')!.addEventListener('click', async () => {
+    // The server also drops this device's subscription with the session.
+    await unsubscribeThisDevice();
     await post('/api/auth/logout').catch(() => {});
     location.href = '/login';
   });
@@ -119,6 +124,7 @@ import { DELETE_CONFIRMATION } from '../../shared/account';
     delSubmit.disabled = true;
     try {
       await api('DELETE', '/api/account', { confirm: delInput.value.trim() });
+      await unsubscribeThisDevice(false);
       location.href = '/login?deleted=1';
     } catch (err) {
       delError.textContent = err instanceof Error ? err.message : String(err);

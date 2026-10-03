@@ -1,11 +1,13 @@
 import { randomId } from '../crypto';
-import { addDays, assertLogDate, weekdayOf } from '../dates';
+import { addDays, assertLogDate, isoDate, weekdayOf } from '../dates';
 import { badRequest, conflict, json, notFound, readJson } from '../http';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { parse, v } from '../validate';
 import { dayView, exerciseView, mealView } from './plan';
 import { weightStatements } from './profile';
+import { pushText } from '../push/messages';
+import { notifyPartner } from '../push/send';
 
 export const DEFAULT_WATER_TARGET_ML = 2500;
 const MAX_RANGE_DAYS = 62;
@@ -159,6 +161,38 @@ async function loadDay(c: Ctx, date: string) {
   };
 }
 
+/**
+ * "Finished their workout": when every planned exercise for the day (after
+ * "same as" days) is checked off. Sent at most once per user per day, and
+ * not for backfilled days older than yesterday.
+ */
+function notifyWorkoutDone(c: Ctx, date: string) {
+  if (date < addDays(isoDate(c.now), -1)) return;
+  const db = c.env.DB;
+  const uid = c.user.id;
+  notifyPartner(c, 'workout', () => pushText.workout(c.user.display_name), {
+    gate: async () => {
+      const row = await db
+        .prepare(
+          `SELECT
+             (SELECT count(*) FROM plan_exercises WHERE user_id = ?1
+                AND weekday = COALESCE((SELECT same_as FROM plan_days WHERE user_id = ?1 AND weekday = ?2), ?2)) AS planned,
+             (SELECT count(*) FROM exercise_logs l JOIN plan_exercises p ON p.id = l.plan_exercise_id
+                WHERE l.user_id = ?1 AND l.date = ?3 AND l.done = 1
+                  AND p.weekday = COALESCE((SELECT same_as FROM plan_days WHERE user_id = ?1 AND weekday = ?2), ?2)) AS done`,
+        )
+        .bind(uid, weekdayOf(date), date)
+        .first<{ planned: number; done: number }>();
+      if (!row || !row.planned || row.done < row.planned) return false;
+      const once = await db
+        .prepare('INSERT OR IGNORE INTO push_once (user_id, key, sent_at) VALUES (?, ?, ?)')
+        .bind(uid, `workout:${date}`, c.now)
+        .run();
+      return once.meta.changes > 0;
+    },
+  });
+}
+
 export function registerLogRoutes(r: Router) {
   r.get('/api/u/:who/days/:date', { who: 'read' }, async (c) => {
     return json(await loadDay(c, assertLogDate(c.params.date, c.now)));
@@ -265,6 +299,7 @@ export function registerLogRoutes(r: Router) {
       if (String(e).includes('UNIQUE')) throw conflict('Already logged today. Edit the existing entry instead.');
       throw e;
     }
+    if (b.planExerciseId && b.done !== false) notifyWorkoutDone(c, date);
     return json({ id }, { status: 201 });
   });
 
@@ -295,6 +330,7 @@ export function registerLogRoutes(r: Router) {
         ),
       ...refreshWorkout(db, c.user.id, row.date, c.now),
     ]);
+    if (b.done === true) notifyWorkoutDone(c, row.date);
     return json({ ok: true });
   });
 

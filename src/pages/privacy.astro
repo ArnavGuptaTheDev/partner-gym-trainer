@@ -96,8 +96,8 @@ const email = siteConfig.contactEmail;
   <ul>
     <li>
       <strong><code>spotter_session</code></strong> keeps you signed in. It's a random token (we store only a scrambled
-      version of it). It's sent only to this site and isn't readable by scripts. It lasts up to 30 days and is renewed
-      while you keep using the app. Signing out ends it.
+      version of it). It's sent only to this site and isn't readable by scripts. It expires 30 days after you last open
+      the app (each day you use the app pushes that back). Signing out ends it.
     </li>
     <li>
       <strong><code>spotter_oauth</code></strong> exists only while you're signing in with Google (at most 10 minutes).
@@ -106,8 +106,40 @@ const email = siteConfig.contactEmail;
     <li>Your light/dark theme choice is saved in your browser only.</li>
   </ul>
   <p>
-    To slow down abuse, the server counts sign-in and pairing attempts per <strong>IP address</strong>. These counters
-    are short-lived: any counter over a day old is deleted the next time someone signs in or enters a pairing code.
+    To slow down abuse, the server counts sign-in, pairing and test-notification attempts per
+    <strong>IP address</strong>. These counters are short-lived: any counter over a day old is deleted the next time
+    someone signs in, enters a pairing code or sends a test notification.
+  </p>
+
+  <h2 id="notifications">Notifications</h2>
+  <p>
+    Notifications are off until you turn them on with a button; the app never asks on its own. When you turn them on,
+    your browser creates a <strong>push subscription</strong> for that device, and we store:
+  </p>
+  <ul>
+    <li>the subscription's address at your browser's push service and the keys used to encrypt messages to it,</li>
+    <li>your browser's name and version (its "user agent"), so you can tell devices apart,</li>
+    <li>when the device was added and when a notification last reached it,</li>
+    <li>your notification settings (which kinds you want, and whether to hide message previews).</li>
+  </ul>
+  <p>
+    Notifications are delivered through your browser maker's push service: <strong>Google</strong> (Chrome, Edge and
+    Android), <strong>Apple</strong> (Safari and iPhone/iPad) or <strong>Mozilla</strong> (Firefox). The content is
+    end-to-end encrypted to your device, so the push service can't read it, but it does see that a notification was
+    sent, when, and roughly how big it was.
+  </p>
+  <p>
+    Notifications only come from your partner's activity (messages, nudges, notes, gym photos, plan changes, milestones
+    and finished workouts), plus test notifications you send yourself. Because they can appear on a lock screen, they
+    <strong>never include weights, body measurements or calories</strong>. Message notifications show the start of the
+    message unless you turn on "hide message previews".
+  </p>
+  <p>
+    A device's subscription is deleted when you sign out on it, when you turn notifications off there, when its push
+    service reports it no longer exists, or when you delete your account. A device also stops getting notifications once
+    its sign-in expires (30 days after you last opened the app there); its subscription is then deleted the next time a
+    notification would have been sent to you. You can turn individual
+    kinds of notification off in Settings at any time.
   </p>
 
   <h2 id="third-parties">Other services your device talks to</h2>
@@ -119,6 +151,7 @@ const email = siteConfig.contactEmail;
       <code>youtube-nocookie.com</code> version) loads only when you tap play.
     </li>
     <li>Other links in a plan open the linked website in a new tab.</li>
+    <li>Your browser's push service, if you turn notifications on (see above).</li>
   </ul>
   <p>
     There are no ads, no analytics or tracking scripts, and no social media widgets. Fonts are served from {app} itself.
@@ -148,6 +181,7 @@ const email = siteConfig.contactEmail;
   <ul>
     <li>Your account, profile, weights, plan, daily logs, streaks, milestones and activity are deleted.</li>
     <li>Your gym photos, chat photos and the photos on your plan are deleted from storage.</li>
+    <li>Your notification settings and every device's push subscription are deleted.</li>
     <li>You're unpaired; your shared chat, reactions, nudges and notes are deleted.</li>
     <li>You're signed out everywhere.</li>
     <li>If you're a super user, invites you created are deleted (people who already joined keep their accounts).</li>

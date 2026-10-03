@@ -76,10 +76,29 @@ let tokenFailure: number | null = null;
 
 export const failNextTokenExchange = (status = 400) => (tokenFailure = status);
 
+// ---------------------------------------------------------------------------
+// Fake push service (fcm.googleapis.com in tests). Records every request and
+// answers 201 unless a status was set for that endpoint.
+
+export interface PushRequest {
+  endpoint: string;
+  headers: Headers;
+  body: Uint8Array;
+}
+export const pushRequests: PushRequest[] = [];
+const pushStatus = new Map<string, number>();
+export const setPushStatus = (endpoint: string, status: number) => pushStatus.set(endpoint, status);
+export const FAKE_PUSH_ORIGIN = 'https://fcm.googleapis.com';
+
 export function installGoogleMock() {
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
+    if (url.startsWith(`${FAKE_PUSH_ORIGIN}/`)) {
+      const body = new Uint8Array(await new Response(init?.body).arrayBuffer());
+      pushRequests.push({ endpoint: url, headers: new Headers(init?.headers), body });
+      return new Response(null, { status: pushStatus.get(url) ?? 201 });
+    }
     if (url !== GOOGLE_TOKEN_URL) return realFetch(input, init);
     const form = new URLSearchParams(String(init?.body ?? ''));
     tokenRequests.push(form);

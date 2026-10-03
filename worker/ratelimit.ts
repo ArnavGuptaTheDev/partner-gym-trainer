@@ -8,6 +8,7 @@ export const LIMITS = {
   oauthStart: { max: 30, windowMs: 15 * 60 * 1000 },
   oauthCallback: { max: 30, windowMs: 15 * 60 * 1000 },
   pairJoin: { max: 10, windowMs: 15 * 60 * 1000 },
+  pushTest: { max: 5, windowMs: 15 * 60 * 1000 },
 } as const;
 
 /**

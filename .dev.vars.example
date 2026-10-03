@@ -9,6 +9,11 @@ SUPER_USER_EMAILS=you@example.com,alex@example.com
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# Web Push (optional locally). Generate with `npm run vapid:keys`.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
+
 # Dev-only: shows a "sign in as seeded user" form on /login. Only ever works
 # for requests to localhost; never set this in production.
 DEV_LOGIN=true

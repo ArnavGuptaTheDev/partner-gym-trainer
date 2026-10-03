@@ -167,8 +167,62 @@ The app deploys as one Cloudflare Worker with static assets. The Astro build in 
 | `SUPER_USER_EMAILS` | secret (required) | Comma-separated. A Google account with one of these emails can sign up without an invite and manage invites, accounts and storage. Checked on every request, so removing an email revokes super-user rights immediately. |
 | `GOOGLE_CLIENT_ID` | secret (required) | OAuth client ID from Google Cloud Console. |
 | `GOOGLE_CLIENT_SECRET` | secret (required) | OAuth client secret from Google Cloud Console. |
+| `VAPID_PUBLIC_KEY` | secret (optional) | Web Push public key (not actually secret; the browser receives it). Without the three VAPID values, notifications are hidden. |
+| `VAPID_PRIVATE_KEY` | secret (optional) | Web Push private key. |
+| `VAPID_SUBJECT` | secret (optional) | Contact for push services, e.g. `mailto:you@example.com`. |
 | `DEV_LOGIN` | `.dev.vars` only | `true` enables the seeded-user dev login, which also requires a localhost request. |
 | `ALLOWED_ORIGINS` | `.dev.vars` only | Extra origins accepted on mutating requests (the Astro dev server). |
+
+## Push notifications
+
+Spotter sends Web Push notifications to your partner when you message, nudge, leave a note, post a gym photo, update a plan, hit a milestone or finish a day's workout. You never get notified about your own actions.
+
+### Setup
+
+1. **Generate keys once.** Run `npm run vapid:keys`. Changing the keys later invalidates every subscription; devices re-subscribe automatically the next time the app is opened.
+2. **Production.** Set the keys as Worker secrets:
+   ```bash
+   npx wrangler secret put VAPID_PUBLIC_KEY
+   npx wrangler secret put VAPID_PRIVATE_KEY
+   npx wrangler secret put VAPID_SUBJECT       # mailto:you@example.com
+   ```
+3. **Local.** Put the same three values in `.dev.vars`. Notifications work on `http://localhost` in Chrome, Edge and Firefox.
+4. **Migrate.** Apply migration `0010_push.sql` (`npm run db:migrate:remote`) before deploying.
+
+### How it works
+
+**Sending (`worker/push/`):**
+- **Encryption:** payloads are encrypted per RFC 8291 (`aes128gcm`), tested against the RFC's example byte for byte.
+- **Signing:** each request carries a VAPID ES256 JWT, cached per push service.
+- **No library:** both are implemented with WebCrypto only.
+- **Never slows a request:** sends run inside `waitUntil`, and a failure is logged without affecting the request that triggered it.
+- **Cleanup:** a 404 or 410 from the push service deletes that subscription.
+
+**Who gets what:**
+- **Partner only:** notifications go to the actor's partner. Each type has its own `tag`, so repeats replace one notification instead of stacking.
+- **Settings:** each person has a master toggle, a toggle per type, and "hide message previews".
+- **No numbers on lock screens:** notification text never contains weights, body measurements or calories.
+- **Allowlisted push services:** subscriptions are only accepted for Google's, Mozilla's, Apple's and Microsoft's push hosts, since the server POSTs to whatever endpoint is registered.
+
+**Devices:**
+- **One row per device,** tied to the session that registered it. Signing out (or deactivation or account deletion) removes that device's subscription through a database cascade.
+- **Expired sign-ins:** devices whose session has expired are skipped, and removed at the next send.
+- **Re-registered on every load:** the app re-registers on every load when permission is granted, which rebinds the device to the current session and picks up rotated endpoints.
+
+**Sessions:**
+- Sessions expire **30 days after the user last opened the app**. Each use slides the expiry, written to the database at most once a day.
+- So someone who hasn't opened Spotter for 30 days stops getting notifications until they sign in again.
+
+**Asking permission:**
+- Only from a button: on Home after pairing (a dismissible card) or in Settings.
+- On iOS in a browser tab, the button is replaced by "Add to Home Screen" steps, because iOS only allows Web Push in installed home-screen apps.
+- If permission was denied, the app explains how to re-enable it in the browser's settings.
+
+**Service worker:** `public/sw.js` only shows notifications and handles clicks (focusing an open tab or opening the target page). There is no offline caching.
+
+### Scheduled reminders (not built)
+
+Reminders on a schedule (e.g. "you haven't logged today") would be a `scheduled` handler in this same Worker (`worker/index.ts`) with a Cron Trigger in `wrangler.toml` (`[triggers] crons = [...]`). That handler would pick who to remind and call the same sending code. This stage stops before that.
 
 ## Google sign-in setup
 
@@ -240,7 +294,7 @@ Sign-in is Google only (`worker/oauth.ts`, `worker/routes/auth.ts`). There's no 
 4. **Redirect.** On success, the user goes to `next`. That's only accepted if it's a same-origin path starting with a single `/`; anything else falls back to `/`.
 
 Other rules:
-- **Sessions:** 32-byte random tokens. Only their SHA-256 is stored in D1. They're sent as `HttpOnly; Secure; SameSite=Lax` cookies and last 30 days, sliding (renewed when under 15 days remain).
+- **Sessions:** 32-byte random tokens. Only their SHA-256 is stored in D1. They're sent as `HttpOnly; Secure; SameSite=Lax` cookies and expire 30 days after the last use (the expiry slides forward, written at most once a day).
 - **Rate limits:** fixed-window counters in D1, per IP. OAuth start and callback: 30 per 15 min each. Pairing-code attempts: 10 per 15 min.
 - **Invites:** single use, expire after 7 days, stored hashed. The `/join?invite=…` link is shown once, at creation. Super users can list invites (with who used each), revoke them, and deactivate accounts. Deactivation signs the user out everywhere.
 
@@ -319,7 +373,8 @@ The tests run inside workerd with a real (in-memory) D1 database and R2 bucket, 
 | `worker-entry.test.ts` | The Worker entry: `/api/*` reaches the API, everything else goes to static assets |
 | `rich-plan.test.ts` | Days, shared days, rest days, structured reps, icons, links/YouTube parsing, validation rules, exercise photos (access, removal, lazy cleanup, limit), diet items/alternatives/stock |
 | `import-plan.test.ts` | The plan-page parser against a fixture page, and saving its output through the API |
-| `account.test.ts` | Account deletion leaves no rows or R2 objects; partner's data survives; confirmation required |
+| `account.test.ts` | Account deletion leaves no rows or R2 objects (incl. push subscriptions); partner's data survives; confirmation required |
+| `push.test.ts` | RFC 8291 test vector (final message and intermediate values); subscribe/unsubscribe and endpoint allowlist; re-login + reload leaves one working row; logout removes the device; per-type, master and hide-preview settings; no self-notification; unpaired users trigger nothing; 404/410 pruning; failures never fail requests; expired sessions skipped and removed; workout-finished sent once; no numbers in bodies; session sliding |
 | `profile-plan.test.ts`, `daily-log.test.ts`, `photos.test.ts`, `chat.test.ts`, `social.test.ts` | The feature endpoints |
 
 ## Accessibility notes

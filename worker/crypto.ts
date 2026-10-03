@@ -10,6 +10,13 @@ export function b64url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Decodes base64url (padding optional). Throws on invalid input. */
+export function fromB64url(s: string): Uint8Array {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4);
+  const bin = atob(b64);
+  return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+}
+
 export function randomBytes(n: number): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(n));
 }

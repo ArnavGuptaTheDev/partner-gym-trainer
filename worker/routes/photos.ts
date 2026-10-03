@@ -3,6 +3,8 @@ import { randomId } from '../crypto';
 import { decodeCursor, page } from '../cursor';
 import { assertLogDate } from '../dates';
 import { HttpError, json, notFound, pageLimit } from '../http';
+import { pushText } from '../push/messages';
+import { notifyPartner } from '../push/send';
 import type { Router } from '../router';
 import type { Ctx } from '../types';
 import { extFor, intField, readImageUpload, streamImage } from '../upload';
@@ -105,6 +107,7 @@ export function registerPhotoRoutes(r: Router) {
       await c.env.PHOTOS.delete(key); // don't leave orphaned bytes
       throw e;
     }
+    if (meta.kind === 'gym') notifyPartner(c, 'photo', () => pushText.photo(c.user.display_name));
     return json(photoView(row), { status: 201 });
   });
 

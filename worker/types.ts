@@ -9,6 +9,11 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   /** Dev only; also requires a localhost request. See devLoginEnabled(). */
   DEV_LOGIN?: string;
+  /** Web Push (VAPID). Public key is base64url uncompressed P-256; private is the base64url `d`. */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** mailto: or https: contact for push services. */
+  VAPID_SUBJECT?: string;
 }
 
 export interface User {

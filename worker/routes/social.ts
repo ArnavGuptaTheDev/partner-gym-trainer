@@ -3,6 +3,8 @@ import { randomId } from '../crypto';
 import { addDays, assertLogDate, weekdayOf } from '../dates';
 import { HttpError, json, notFound, pageLimit, readJson } from '../http';
 import { currentStreak, intersect, qualifyingMilestones, type MilestoneKind } from '../milestones';
+import { pushText } from '../push/messages';
+import { notifyPartner } from '../push/send';
 import type { Router } from '../router';
 import type { Ctx, Pair } from '../types';
 import { parse, v } from '../validate';
@@ -128,6 +130,7 @@ export function registerSocialRoutes(r: Router) {
       .prepare('INSERT INTO nudges (id, pair_id, from_user, to_user, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .bind(randomId(), pair.id, c.user.id, c.partnerId, kind, c.now)
       .run();
+    notifyPartner(c, 'nudge', () => pushText.nudge(c.user.display_name, kind), { urgency: 'high' });
     return json({ ok: true }, { status: 201 });
   });
 
@@ -153,6 +156,7 @@ export function registerSocialRoutes(r: Router) {
         )
         .bind(pair.id, c.partnerId, date, c.user.id, body, c.now)
         .run();
+      notifyPartner(c, 'note', () => pushText.note(c.user.display_name));
     }
     return json({ ok: true });
   });
@@ -236,6 +240,7 @@ export function registerSocialRoutes(r: Router) {
         ]),
       );
       for (const kind of fresh) have.set(kind, { kind, achievedAt: c.now, seenAt: null });
+      notifyPartner(c, 'milestone', () => pushText.milestone(c.user.display_name, fresh[fresh.length - 1]));
     }
 
     const per = (res: D1Result, key: string) => {

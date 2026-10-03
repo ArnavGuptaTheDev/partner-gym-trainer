@@ -503,6 +503,51 @@ export const notFoundPage = {
   home: 'Back to Home',
 };
 
+export const push = {
+  title: 'Notifications',
+  lead: 'Get a buzz when your partner messages, nudges or finishes a workout.',
+  turnOn: 'Turn on notifications',
+  turningOn: 'Turning on…',
+  thisDeviceOff: 'Notifications are on for your account, but not on this device yet.',
+  enableHere: 'Turn on for this device',
+  master: 'Notifications',
+  types: {
+    message: 'Chat messages',
+    nudge: 'Nudges and “proud of you”',
+    photo: 'Gym photos',
+    plan: 'Plan updates',
+    note: 'Notes of the day',
+    milestone: 'Milestones',
+    workout: 'Workout finished',
+  } as Record<string, string>,
+  hidePreviews: 'Hide message previews',
+  hidePreviewsHint: 'Shows “sent you a message” instead of the text, handy on a lock screen.',
+  test: 'Send me a test',
+  testSent: (n: number) => (n ? `Sent to ${n} device${n === 1 ? '' : 's'}.` : 'No devices with notifications on yet.'),
+  unsupported: 'This browser doesn’t support notifications.',
+  unavailable: 'Notifications aren’t set up on this server yet.',
+  iosTitle: 'Add Spotter to your Home Screen first',
+  iosSteps: [
+    'Tap the Share button (the square with an arrow).',
+    'Choose “Add to Home Screen”.',
+    'Open Spotter from your Home Screen and turn notifications on there.',
+  ],
+  deniedTitle: 'Notifications are blocked',
+  deniedLead: 'You blocked notifications for this site. To turn them back on:',
+  deniedSteps: [
+    'Chrome / Edge / Android: tap the icon left of the address (or ⋮ → Settings → Site settings → Notifications) and allow Spotter.',
+    'Safari on Mac: Safari → Settings → Websites → Notifications, then allow Spotter.',
+    'iPhone / iPad (Home Screen app): Settings → Notifications → Spotter → Allow Notifications.',
+    'Firefox: click the lock icon left of the address, then clear the blocked notification permission.',
+  ],
+  deniedAfter: 'Then reload this page.',
+  dismissed: 'No problem. You can turn notifications on any time.',
+  promptTitle: (name: string) => `Know when ${name} needs you`,
+  promptLead: 'Get notified about messages, nudges and finished workouts. You choose which ones.',
+  notNow: 'Not now',
+  privacyNote: 'Notifications never include weights or calories.',
+};
+
 export const settings = {
   profileTitle: 'Profile',
   displayName: 'Display name',

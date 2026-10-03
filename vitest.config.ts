@@ -18,6 +18,10 @@ export default defineConfig(async () => {
             GOOGLE_CLIENT_SECRET: 'test-secret',
             // Off by default; dev-login tests turn it on per request.
             DEV_LOGIN: '',
+            // Test-only VAPID pair (never used outside tests).
+            VAPID_PUBLIC_KEY: 'BKZAhIE2oUv8NKrboai1M3lBzvSq_06Cqp8IYBESDff8H0sF6FB1I-5XGxh4eChmfpjYqMkGLKJKowY07xwR_LQ',
+            VAPID_PRIVATE_KEY: '0QWXMD0_DDcfCti6ahgaAq7W9_MMOSRENGQfSprrt8c',
+            VAPID_SUBJECT: 'mailto:test@example.com',
           },
         },
       }),
