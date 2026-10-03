@@ -19,7 +19,7 @@ const tabs = [
 <BaseLayout title={title}>
   <header class="app-header">
     <a class="brand" href="/"><span class="brand-dot" aria-hidden="true"></span>{site.name}</a>
-    <a class="icon-btn" href="/settings" aria-label={nav.settings}><Icon name="settings" /></a>
+    <a class="icon-btn" href="/settings" aria-label={nav.settings} id="settings-link"><Icon name="settings" /></a>
   </header>
   <slot />
   <div class="toast-region" aria-live="polite" slot="after" id="toasts"></div>
@@ -37,11 +37,27 @@ const tabs = [
     </ul>
   </nav>
   <script>
-    import { get, getMe, post } from '../lib/api';
+    import { get, getMe, patch, post } from '../lib/api';
     import { tone } from '../content/copy';
 
     // Auth guard: every app page needs a session; api() redirects on 401.
-    getMe().catch(() => {});
+    getMe()
+      .then((me) => {
+        // Show the Google avatar in place of the settings icon.
+        if (me.user.avatarUrl) {
+          const img = document.createElement('img');
+          img.src = me.user.avatarUrl;
+          img.alt = '';
+          img.className = 'avatar';
+          img.referrerPolicy = 'no-referrer';
+          document.getElementById('settings-link')?.replaceChildren(img);
+        }
+        // Accounts are created at the OAuth callback, which can't see the
+        // browser's time zone; sync it once here.
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz && tz !== me.user.timezone) patch('/api/u/me/profile', { timezone: tz }).catch(() => {});
+      })
+      .catch(() => {});
 
     // Unread badge: poll a tiny endpoint every 30 s while the tab is visible.
     const badge = document.querySelector<HTMLElement>('[data-unread]');

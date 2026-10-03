@@ -186,6 +186,10 @@ img { max-width: 100%; display: block; }
 .btn--ghost { background: transparent; color: var(--text); border-color: var(--line); }
 .btn--sun { background: var(--sun); color: var(--sun-ink); }
 .btn--small { min-height: 36px; padding: 0 14px; font-size: 0.9rem; }
+/* Google's sign-in button guidance: white fill, grey outline, dark label. */
+.btn--google { background: #ffffff; color: #1f1f1f; border-color: #747775; }
+.btn--google:hover { filter: none; background: #f2f2f2; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .btn--danger { background: transparent; color: var(--danger); border-color: currentColor; }
 .icon-btn {
   appearance: none; border: 0; background: transparent; color: inherit;

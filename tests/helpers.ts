@@ -1,7 +1,11 @@
 import { env } from 'cloudflare:test';
 import { handle } from '../functions/_lib/app';
+import { b64url } from '../functions/_lib/crypto';
+import { GOOGLE_TOKEN_URL } from '../functions/_lib/oauth';
+import type { Env } from '../functions/_lib/types';
 
 export const BASE = 'https://spotter.test';
+export const CLIENT_ID = 'test-client.apps.googleusercontent.com';
 
 let counter = 0;
 const next = () => ++counter;
@@ -9,6 +13,7 @@ const next = () => ++counter;
 /** Each call gets its own IP so rate limits don't bleed between tests. */
 export const uniqueIp = () => `10.${(next() >> 16) & 255}.${(counter >> 8) & 255}.${counter & 255}`;
 export const uniqueEmail = (prefix = 'user') => `${prefix}.${Date.now().toString(36)}.${next()}@example.com`;
+export const uniqueSub = () => `${Date.now()}${next()}`.padEnd(21, '0');
 
 export interface ApiOpts {
   body?: unknown;
@@ -16,13 +21,19 @@ export interface ApiOpts {
   ip?: string;
   headers?: Record<string, string>;
   rawBody?: BodyInit;
+  /** Override the request origin, e.g. http://localhost:4321. */
+  base?: string;
+  /** Extra/overridden env vars for this request. */
+  env?: Partial<Env>;
 }
 
 export interface ApiResult<T = any> {
   status: number;
   data: T;
+  /** `spotter_session=…` if the response set one. */
   cookie?: string;
-  setCookie: string | null;
+  setCookies: string[];
+  location: string | null;
   res: Response;
 }
 
@@ -37,25 +48,125 @@ export async function api<T = any>(method: string, path: string, opts: ApiOpts =
   headers.set('cf-connecting-ip', opts.ip ?? uniqueIp());
 
   const pending: Promise<unknown>[] = [];
-  const res = await handle(new Request(BASE + path, { method, headers, body }), env, (p) => pending.push(p));
+  const reqEnv = opts.env ? ({ ...env, ...opts.env } as Env) : (env as unknown as Env);
+  const res = await handle(new Request((opts.base ?? BASE) + path, { method, headers, body, redirect: 'manual' }), reqEnv, (p) => pending.push(p));
   await Promise.all(pending);
 
-  const setCookie = res.headers.get('set-cookie');
-  const m = setCookie?.match(/spotter_session=([^;]*)/);
+  const setCookies = res.headers.getSetCookie();
+  const session = setCookies.map((c) => c.match(/^spotter_session=([^;]+)/)?.[1]).find(Boolean);
   const type = res.headers.get('content-type') ?? '';
   const data = type.includes('json') ? await res.clone().json() : null;
-  return { status: res.status, data: data as T, cookie: m?.[1] ? `spotter_session=${m[1]}` : undefined, setCookie, res };
+  return {
+    status: res.status,
+    data: data as T,
+    cookie: session ? `spotter_session=${session}` : undefined,
+    setCookies,
+    location: res.headers.get('location'),
+    res,
+  };
 }
 
-const PASSWORD = 'correct horse battery';
+// ---------------------------------------------------------------------------
+// Fake Google token endpoint. Each authorization `code` maps to the ID-token
+// claims Google would return for it; every other fetch goes to the network.
 
-/** Registers (or logs in) the configured super user and returns a cookie. */
+const pendingCodes = new Map<string, Record<string, unknown>>();
+export const tokenRequests: URLSearchParams[] = [];
+let tokenFailure: number | null = null;
+
+export const failNextTokenExchange = (status = 400) => (tokenFailure = status);
+
+export function installGoogleMock() {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url !== GOOGLE_TOKEN_URL) return realFetch(input, init);
+    const form = new URLSearchParams(String(init?.body ?? ''));
+    tokenRequests.push(form);
+    if (tokenFailure) {
+      const status = tokenFailure;
+      tokenFailure = null;
+      return Response.json({ error: 'invalid_grant' }, { status });
+    }
+    const claims = pendingCodes.get(form.get('code') ?? '');
+    if (!claims) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+    pendingCodes.delete(form.get('code')!);
+    const idToken = `${b64url(new TextEncoder().encode('{"alg":"RS256"}'))}.${b64url(new TextEncoder().encode(JSON.stringify(claims)))}.sig`;
+    return Response.json({ access_token: 'at', id_token: idToken, token_type: 'Bearer', expires_in: 3599 });
+  }) as typeof fetch;
+}
+
+export interface GoogleIdentity {
+  sub: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  /** Overrides/extra claims, e.g. { email_verified: false } or { aud: 'x' }. */
+  claims?: Record<string, unknown>;
+}
+
+export interface StartedFlow {
+  oauthCookie: string;
+  state: string;
+  nonce: string;
+  challenge: string;
+  googleUrl: URL;
+  start: ApiResult;
+}
+
+/** GET /start: returns the cookie and the parameters sent to Google. */
+export async function startOAuth(query: Record<string, string> = {}, opts: ApiOpts = {}): Promise<StartedFlow> {
+  const qs = new URLSearchParams(query).toString();
+  const start = await api('GET', `/api/auth/google/start${qs ? `?${qs}` : ''}`, opts);
+  const cookie = start.setCookies.find((c) => c.startsWith('spotter_oauth='));
+  if (start.status !== 302 || !cookie || !start.location) throw new Error(`start failed: ${start.status} ${start.location}`);
+  const googleUrl = new URL(start.location);
+  return {
+    oauthCookie: cookie.split(';')[0],
+    state: googleUrl.searchParams.get('state')!,
+    nonce: googleUrl.searchParams.get('nonce')!,
+    challenge: googleUrl.searchParams.get('code_challenge')!,
+    googleUrl,
+    start,
+  };
+}
+
+/** Simulates Google redirecting back with a code for `who`. */
+export async function finishOAuth(flow: StartedFlow, who: GoogleIdentity, opts: ApiOpts & { state?: string } = {}) {
+  const code = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  pendingCodes.set(code, {
+    iss: 'https://accounts.google.com',
+    aud: CLIENT_ID,
+    iat: now,
+    exp: now + 3600,
+    nonce: flow.nonce,
+    sub: who.sub,
+    email: who.email,
+    email_verified: true,
+    name: who.name ?? 'Test User',
+    picture: who.picture ?? 'https://lh3.googleusercontent.com/a/test',
+    ...who.claims,
+  });
+  const state = opts.state ?? flow.state;
+  return api('GET', `/api/auth/google/callback?code=${code}&state=${encodeURIComponent(state)}`, {
+    ...opts,
+    cookie: [flow.oauthCookie, opts.cookie].filter(Boolean).join('; '),
+  });
+}
+
+/** Full sign-in round trip. */
+export async function googleLogin(who: GoogleIdentity, query: Record<string, string> = {}) {
+  return finishOAuth(await startOAuth(query), who);
+}
+
+// ---------------------------------------------------------------------------
+
+/** Signs in (creating on first use) a SUPER_USER_EMAILS user; returns a cookie. */
 export async function superCookie(email = 'boss@example.com'): Promise<string> {
-  const reg = await api('POST', '/api/auth/register', { body: { email, password: PASSWORD, displayName: 'Boss' } });
-  if (reg.cookie) return reg.cookie;
-  const login = await api('POST', '/api/auth/login', { body: { email, password: PASSWORD } });
-  if (!login.cookie) throw new Error(`super login failed: ${login.status} ${JSON.stringify(login.data)}`);
-  return login.cookie;
+  const res = await googleLogin({ sub: `sub-${email.toLowerCase()}`, email, name: 'Boss' });
+  if (!res.cookie) throw new Error(`super login failed: ${res.status} ${res.location}`);
+  return res.cookie;
 }
 
 export async function createInvite(cookie: string, note?: string): Promise<{ id: string; token: string }> {
@@ -66,21 +177,19 @@ export async function createInvite(cookie: string, note?: string): Promise<{ id:
 
 export interface TestUser {
   id: string;
+  sub: string;
   email: string;
   cookie: string;
-  password: string;
 }
 
-/** Creates an invited, logged-in regular user. */
+/** Creates an invited, signed-in regular user. */
 export async function newUser(name = 'Sam'): Promise<TestUser> {
-  const boss = await superCookie();
-  const { token } = await createInvite(boss);
-  const email = uniqueEmail(name.toLowerCase());
-  const res = await api('POST', '/api/auth/register', {
-    body: { email, password: PASSWORD, displayName: name, inviteToken: token },
-  });
-  if (res.status !== 201 || !res.cookie) throw new Error(`register failed: ${res.status} ${JSON.stringify(res.data)}`);
-  return { id: res.data.user.id, email, cookie: res.cookie, password: PASSWORD };
+  const { token } = await createInvite(await superCookie());
+  const who = { sub: uniqueSub(), email: uniqueEmail(name.toLowerCase()), name };
+  const res = await googleLogin(who, { invite: token });
+  if (!res.cookie) throw new Error(`sign-up failed: ${res.status} ${res.location}`);
+  const me = await api('GET', '/api/auth/me', { cookie: res.cookie });
+  return { id: me.data.user.id, sub: who.sub, email: who.email, cookie: res.cookie };
 }
 
 /** Pairs two users via a code; `a` creates it, `b` joins. */
@@ -100,4 +209,4 @@ export async function newPair(pairType: 'couple' | 'friends' = 'friends') {
   return { a, b, pairId };
 }
 
-export { env, PASSWORD };
+export { env };

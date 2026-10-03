@@ -35,7 +35,7 @@ export async function authenticate(c: Ctx): Promise<void> {
 
   const [userRes, pairRes] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT u.id, u.email, u.display_name, u.is_active, u.timezone, u.units, u.created_at, s.expires_at
+      `SELECT u.id, u.email, u.display_name, u.avatar_url, u.is_active, u.timezone, u.units, u.created_at, s.expires_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ?1 AND s.expires_at > ?2`,
     ).bind(hash, c.now),

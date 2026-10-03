@@ -1,31 +1,26 @@
-import { hashPassword, randomId, sha256Hex, verifyPassword, PBKDF2_ITERATIONS } from '../crypto';
-import { conflict, HttpError, json, readJson } from '../http';
+import { randomId, sha256Hex, timingSafeEqual } from '../crypto';
+import { HttpError, json, notFound, readJson } from '../http';
 import { isSuperEmail } from '../middleware';
-import { pairView } from './pair';
+import {
+  clearOAuthCookie,
+  encodeOAuthCookie,
+  exchangeCode,
+  googleAuthUrl,
+  newOAuthState,
+  OAuthError,
+  readOAuthCookie,
+  safeNext,
+  type GoogleClaims,
+} from '../oauth';
 import { rateLimit } from '../ratelimit';
 import type { Router } from '../router';
 import { clearSessionCookie, createSession, readSessionToken, sessionCookie } from '../session';
 import type { Ctx } from '../types';
 import { parse, v } from '../validate';
+import { pairView } from './pair';
 
-const RegisterBody = v.object({
-  email: v.email(),
-  password: v.string({ min: 10, max: 200, trim: false }),
-  displayName: v.string({ min: 1, max: 40 }),
-  inviteToken: v.optional(v.string({ max: 100 })),
-  timezone: v.optional(v.string({ max: 64 })),
-});
-
-const LoginBody = v.object({
-  email: v.email(),
-  password: v.string({ min: 1, max: 200, trim: false }),
-});
-
-// Verified against on unknown emails so response time doesn't reveal
-// whether an account exists.
-const DUMMY = { hash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=', salt: 'AAAAAAAAAAAAAAAAAAAAAA==' };
-
-const invalidInvite = () => new HttpError(410, 'invite_invalid', 'This invite link is invalid, used, or expired.');
+const DevLoginBody = v.object({ email: v.email() });
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export function meResponse(c: Ctx) {
   return {
@@ -33,6 +28,7 @@ export function meResponse(c: Ctx) {
       id: c.user.id,
       email: c.user.email,
       displayName: c.user.display_name,
+      avatarUrl: c.user.avatar_url,
       timezone: c.user.timezone,
       units: c.user.units,
       isSuper: c.isSuper,
@@ -41,82 +37,143 @@ export function meResponse(c: Ctx) {
   };
 }
 
-export function registerAuthRoutes(r: Router) {
-  r.post('/api/auth/register', { auth: 'public' }, async (c) => {
-    await rateLimit(c, 'register');
-    const body = parse(RegisterBody, await readJson(c.req));
-    const isSuper = isSuperEmail(c.env, body.email);
-    const db = c.env.DB;
+/** 302 with any number of Set-Cookie headers. */
+function redirect(location: string, cookies: string[] = []): Response {
+  const headers = new Headers({ location, 'cache-control': 'no-store' });
+  for (const cookie of cookies) headers.append('set-cookie', cookie);
+  return new Response(null, { status: 302, headers });
+}
 
-    let inviteId: string | null = null;
-    if (!isSuper) {
-      if (!body.inviteToken) throw new HttpError(403, 'invite_required', 'Spotter is invite-only. You need an invite link.');
-      const invite = await db
-        .prepare('SELECT id FROM invites WHERE token_hash = ? AND used_by IS NULL AND revoked_at IS NULL AND expires_at > ?')
-        .bind(await sha256Hex(body.inviteToken), c.now)
-        .first<{ id: string }>();
-      if (!invite) throw invalidInvite();
-      inviteId = invite.id;
-    }
+/**
+ * The dev-only login is available only when DEV_LOGIN is exactly "true" AND
+ * the request is addressed to localhost. Anything else fails closed (404),
+ * so a stray production variable can't enable it.
+ */
+export function devLoginEnabled(c: Ctx): boolean {
+  return c.env.DEV_LOGIN === 'true' && LOCAL_HOSTS.has(c.url.hostname);
+}
 
-    const existing = await db.prepare('SELECT 1 FROM users WHERE email = ?').bind(body.email).first();
-    if (existing) throw conflict('An account with that email already exists.');
+type Outcome = { userId: string } | { refuse: 'invite_only' | 'deactivated' | 'email_taken' };
 
-    const pw = await hashPassword(body.password);
-    const userId = randomId();
-    const tz = body.timezone ?? 'UTC';
+/** Invite-only account resolution. Users are identified by Google `sub` only. */
+async function resolveUser(c: Ctx, g: GoogleClaims, inviteToken: string | undefined): Promise<Outcome> {
+  const db = c.env.DB;
+  const existing = await db.prepare('SELECT id, is_active FROM users WHERE google_sub = ?').bind(g.sub).first<{ id: string; is_active: number }>();
 
-    if (inviteId) {
-      // Insert only if the invite is still unclaimed, then claim it, in one
-      // transaction, so two people racing on the same link can't both win.
-      const [ins] = await db.batch([
-        db
-          .prepare(
-            `INSERT INTO users (id, email, display_name, pw_hash, pw_salt, pw_iter, invite_id, timezone, created_at)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
-             WHERE EXISTS (SELECT 1 FROM invites WHERE id = ?7 AND used_by IS NULL AND revoked_at IS NULL AND expires_at > ?9)`,
-          )
-          .bind(userId, body.email, body.displayName, pw.hash, pw.salt, pw.iterations, inviteId, tz, c.now),
-        db
-          .prepare(
-            `UPDATE invites SET used_by = ?1, used_at = ?2
-             WHERE id = ?3 AND used_by IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?1)`,
-          )
-          .bind(userId, c.now, inviteId),
-      ]);
-      if (!ins.meta.changes) throw invalidInvite();
-    } else {
+  if (existing) {
+    if (!existing.is_active) return { refuse: 'deactivated' };
+    // Refresh Google profile data. Email follows Google unless another
+    // account already holds it; display_name is the user's own and untouched.
+    await db
+      .prepare(
+        `UPDATE users SET
+           google_name = ?2, avatar_url = ?3,
+           email = CASE WHEN EXISTS (SELECT 1 FROM users WHERE email = ?4 AND id != ?1) THEN email ELSE ?4 END
+         WHERE id = ?1`,
+      )
+      .bind(existing.id, g.name, g.picture, g.email)
+      .run();
+    return { userId: existing.id };
+  }
+
+  const userId = randomId();
+  const displayName = (g.name || g.email.split('@')[0]).slice(0, 40);
+  const cols = 'id, google_sub, email, display_name, google_name, avatar_url, invite_id, created_at';
+
+  try {
+    if (isSuperEmail(c.env, g.email)) {
       await db
-        .prepare(
-          `INSERT INTO users (id, email, display_name, pw_hash, pw_salt, pw_iter, timezone, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(userId, body.email, body.displayName, pw.hash, pw.salt, pw.iterations, tz, c.now)
+        .prepare(`INSERT INTO users (${cols}) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`)
+        .bind(userId, g.sub, g.email, displayName, g.name, g.picture, c.now)
         .run();
+      return { userId };
     }
 
-    const token = await createSession(c.env, userId, c.now);
-    return json(
-      { user: { id: userId, email: body.email, displayName: body.displayName, isSuper } },
-      { status: 201, headers: { 'set-cookie': sessionCookie(token) } },
-    );
+    if (!inviteToken) return { refuse: 'invite_only' };
+    const invite = await db
+      .prepare('SELECT id FROM invites WHERE token_hash = ? AND used_by IS NULL AND revoked_at IS NULL AND expires_at > ?')
+      .bind(await sha256Hex(inviteToken), c.now)
+      .first<{ id: string }>();
+    if (!invite) return { refuse: 'invite_only' };
+
+    // Create the account only if the invite is still unclaimed, then claim
+    // it, in one transaction: two callbacks racing on one invite can't both win.
+    const [ins] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO users (${cols})
+           SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+           WHERE EXISTS (SELECT 1 FROM invites WHERE id = ?7 AND used_by IS NULL AND revoked_at IS NULL AND expires_at > ?8)`,
+        )
+        .bind(userId, g.sub, g.email, displayName, g.name, g.picture, invite.id, c.now),
+      db
+        .prepare(
+          `UPDATE invites SET used_by = ?1, used_at = ?2
+           WHERE id = ?3 AND used_by IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?1)`,
+        )
+        .bind(userId, c.now, invite.id),
+    ]);
+    return ins.meta.changes ? { userId } : { refuse: 'invite_only' };
+  } catch (e) {
+    // A concurrent first login with the same sub: the other request created
+    // the account, so this one simply logs in. An email already held by a
+    // different Google account is refused, never matched.
+    if (/UNIQUE.*google_sub/.test(String(e))) return resolveUser(c, g, undefined);
+    if (/UNIQUE.*email/.test(String(e))) return { refuse: 'email_taken' };
+    throw e;
+  }
+}
+
+export function registerAuthRoutes(r: Router) {
+  r.get('/api/auth/google/start', { auth: 'public' }, async (c) => {
+    await rateLimit(c, 'oauthStart');
+    if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) return redirect('/login?error=config');
+    const invite = c.url.searchParams.get('invite')?.slice(0, 200) || undefined;
+    const s = newOAuthState(invite, safeNext(c.url.searchParams.get('next')));
+    return redirect(await googleAuthUrl(c.env, c.url.origin, s), [encodeOAuthCookie(s)]);
   });
 
-  r.post('/api/auth/login', { auth: 'public' }, async (c) => {
-    await rateLimit(c, 'login');
-    const body = parse(LoginBody, await readJson(c.req));
-    const row = await c.env.DB.prepare('SELECT id, pw_hash, pw_salt, pw_iter, is_active FROM users WHERE email = ?')
-      .bind(body.email)
-      .first<{ id: string; pw_hash: string; pw_salt: string; pw_iter: number; is_active: number }>();
+  r.get('/api/auth/google/callback', { auth: 'public' }, async (c) => {
+    await rateLimit(c, 'oauthCallback');
+    const clear = clearOAuthCookie();
+    const saved = readOAuthCookie(c.req);
+    const params = c.url.searchParams;
 
-    const ok = row
-      ? await verifyPassword(body.password, row.pw_hash, row.pw_salt, row.pw_iter)
-      : (await verifyPassword(body.password, DUMMY.hash, DUMMY.salt, PBKDF2_ITERATIONS), false);
+    if (params.get('error')) return redirect('/login?error=cancelled', [clear]);
+    const state = params.get('state') ?? '';
+    const code = params.get('code') ?? '';
+    if (!saved || !state || !code || !timingSafeEqual(state, saved.state)) return redirect('/login?error=state', [clear]);
+    if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) return redirect('/login?error=config', [clear]);
 
-    if (!row || !ok) throw new HttpError(401, 'bad_credentials', 'Email or password is incorrect.');
-    if (!row.is_active) throw new HttpError(403, 'deactivated', 'This account has been deactivated.');
+    let claims: GoogleClaims;
+    try {
+      claims = await exchangeCode(c.env, c.url.origin, code, saved, c.now);
+    } catch (e) {
+      if (e instanceof OAuthError) return redirect(`/login?error=${e.code}`, [clear]);
+      throw e;
+    }
 
-    const token = await createSession(c.env, row.id, c.now);
+    const outcome = await resolveUser(c, claims, saved.invite);
+    if ('refuse' in outcome) {
+      return redirect(outcome.refuse === 'invite_only' ? '/invite-only' : `/login?error=${outcome.refuse}`, [clear]);
+    }
+    const token = await createSession(c.env, outcome.userId, c.now);
+    return redirect(saved.next, [clear, sessionCookie(token)]);
+  });
+
+  // Dev-only: sign in a seeded user by email. See devLoginEnabled().
+  r.get('/api/auth/dev-login', { auth: 'public' }, async (c) => {
+    if (!devLoginEnabled(c)) throw notFound('No such endpoint.');
+    return json({ enabled: true });
+  });
+
+  r.post('/api/auth/dev-login', { auth: 'public' }, async (c) => {
+    if (!devLoginEnabled(c)) throw notFound('No such endpoint.');
+    const { email } = parse(DevLoginBody, await readJson(c.req));
+    const user = await c.env.DB.prepare('SELECT id, is_active FROM users WHERE email = ?').bind(email).first<{ id: string; is_active: number }>();
+    if (!user) throw notFound('No user with that email. Did you run the seed script?');
+    if (!user.is_active) throw new HttpError(403, 'deactivated', 'This account has been deactivated.');
+    const token = await createSession(c.env, user.id, c.now);
     return json({ ok: true }, { headers: { 'set-cookie': sessionCookie(token) } });
   });
 

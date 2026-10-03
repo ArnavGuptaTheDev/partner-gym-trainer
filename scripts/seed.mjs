@@ -3,24 +3,15 @@
 //
 //   npm run db:migrate:local && npm run db:seed:local
 //
-// Logins: alex@example.com / sam@example.com, password "spotter-demo-1".
-// Add alex@example.com to SUPER_USER_EMAILS in .dev.vars to try the admin page.
+// Demo users have fake Google subjects, so they can't sign in with Google.
+// Use the dev login on /login instead (needs DEV_LOGIN=true in .dev.vars).
+// alex@example.com is a super user in .dev.vars.example (admin page).
 import { execSync } from 'node:child_process';
 import { webcrypto as crypto } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 
-const PASSWORD = 'spotter-demo-1';
-const ITER = 100_000;
 const DB = 'spotter';
 const BUCKET = 'spotter-photos';
-
-const b64 = (buf) => Buffer.from(buf).toString('base64');
-async function hash(password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITER }, key, 256);
-  return { hash: b64(bits), salt: b64(salt) };
-}
 
 const q = (v) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
 const id = () => crypto.randomUUID();
@@ -39,13 +30,21 @@ const insert = (table, row) => {
 };
 
 const now = Date.now();
-const alex = { id: id(), email: 'alex@example.com', name: 'Alex' };
-const sam = { id: id(), email: 'sam@example.com', name: 'Sam' };
+const alex = { id: id(), sub: 'seed-google-sub-alex', email: 'alex@example.com', name: 'Alex' };
+const sam = { id: id(), sub: 'seed-google-sub-sam', email: 'sam@example.com', name: 'Sam' };
 
-sql.push(`DELETE FROM users WHERE email IN (${q(alex.email)}, ${q(sam.email)});`);
+sql.push(`DELETE FROM users WHERE google_sub IN (${q(alex.sub)}, ${q(sam.sub)});`);
 for (const u of [alex, sam]) {
-  const pw = await hash(PASSWORD);
-  insert('users', { id: u.id, email: u.email, display_name: u.name, pw_hash: pw.hash, pw_salt: pw.salt, pw_iter: ITER, timezone: 'UTC', created_at: now - 8 * 864e5 });
+  insert('users', {
+    id: u.id,
+    google_sub: u.sub,
+    email: u.email,
+    display_name: u.name,
+    google_name: `${u.name} Demo`,
+    avatar_url: null,
+    timezone: 'UTC',
+    created_at: now - 8 * 864e5,
+  });
 }
 const pairId = id();
 insert('pairs', { id: pairId, user_a_id: alex.id, user_b_id: sam.id, pair_type: 'couple', allow_self_edit: 0, together_since: '2023-05-20', created_at: now - 8 * 864e5 });
@@ -172,4 +171,4 @@ writeFileSync('seed.sql', sql.join('\n') + '\n');
 const run = (cmd) => execSync(cmd, { stdio: 'inherit' });
 run(`npx wrangler d1 execute ${DB} --local --file seed.sql`);
 for (const p of photos) run(`npx wrangler r2 object put ${BUCKET}/${p.key} --file ${p.file} --content-type image/jpeg --local`);
-console.log(`\nSeeded. Sign in as ${alex.email} or ${sam.email} with password "${PASSWORD}".`);
+console.log(`\nSeeded. Sign in as ${alex.email} or ${sam.email} via the dev login on /login (DEV_LOGIN=true).`);

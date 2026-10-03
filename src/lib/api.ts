@@ -41,7 +41,7 @@ export const patch = <T = any>(path: string, body?: unknown) => api<T>('PATCH', 
 export const del = <T = any>(path: string) => api<T>('DELETE', path);
 
 export interface Me {
-  user: { id: string; email: string; displayName: string; timezone: string; units: 'metric' | 'imperial'; isSuper: boolean };
+  user: { id: string; email: string; displayName: string; avatarUrl: string | null; timezone: string; units: 'metric' | 'imperial'; isSuper: boolean };
   pair: null | {
     id: string;
     type: 'couple' | 'friends';

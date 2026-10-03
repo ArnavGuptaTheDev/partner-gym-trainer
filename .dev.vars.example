@@ -1,5 +1,17 @@
 # Copy to .dev.vars for local development (never commit .dev.vars).
-# alex@example.com is the seeded demo user (npm run db:seed:local).
+
+# Emails that can sign up without an invite. alex@example.com is the seeded
+# demo user (npm run db:seed:local), so the admin page works locally.
 SUPER_USER_EMAILS=you@example.com,alex@example.com
+
+# Google OAuth client (see README "Google sign-in setup"). Register this
+# redirect URI on the client: http://localhost:4321/api/auth/google/callback
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Dev-only: shows a "sign in as seeded user" form on /login. Only ever works
+# for requests to localhost; never set this in production.
+DEV_LOGIN=true
+
 # The Astro dev server (npm run dev) proxies /api to wrangler, so allow its origin.
 ALLOWED_ORIGINS=http://localhost:4321

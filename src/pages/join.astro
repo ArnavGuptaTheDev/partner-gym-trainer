@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import GoogleButton from '../components/GoogleButton.astro';
+import { auth } from '../content/copy';
+---
+<BaseLayout title={auth.joinTitle} bare>
+  <div class="auth-hero">
+    <div class="mark" aria-hidden="true">🤝</div>
+    <h1>{auth.joinTitle}</h1>
+    <p class="muted">{auth.joinLead}</p>
+  </div>
+  <div class="card stack">
+    <p class="alert" role="status" id="invite-status">{auth.inviteChecking}</p>
+    <div id="join-action" hidden>
+      <GoogleButton id="google" />
+    </div>
+  </div>
+  <p class="center small" style="margin-top:20px"><a href="/login">{auth.backToSignIn}</a></p>
+</BaseLayout>
+
+<script>
+  import { api } from '../lib/api';
+  import { auth } from '../content/copy';
+
+  const status = document.getElementById('invite-status')!;
+  const action = document.getElementById('join-action')!;
+  const invite = new URLSearchParams(location.search).get('invite');
+
+  if (!invite) {
+    status.textContent = auth.inviteMissing;
+  } else {
+    api<{ valid: boolean }>('GET', `/api/invites/${encodeURIComponent(invite)}`, undefined, { redirectOn401: false })
+      .then((r) => {
+        if (!r.valid) {
+          status.textContent = auth.inviteInvalid;
+          return;
+        }
+        status.textContent = '';
+        // The invite token rides along in the short-lived OAuth cookie and is
+        // consumed by the callback together with account creation.
+        (document.getElementById('google') as HTMLAnchorElement).href =
+          `/api/auth/google/start?invite=${encodeURIComponent(invite)}&next=${encodeURIComponent('/settings?welcome=1')}`;
+        action.hidden = false;
+      })
+      .catch(() => (status.textContent = auth.inviteInvalid));
+  }
+</script>

@@ -14,6 +14,10 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             SUPER_USER_EMAILS: 'boss@example.com, Second@Example.com',
             ALLOWED_ORIGINS: '',
+            GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
+            GOOGLE_CLIENT_SECRET: 'test-secret',
+            // Off by default; dev-login tests turn it on per request.
+            DEV_LOGIN: '',
           },
         },
       }),

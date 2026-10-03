@@ -3,17 +3,20 @@ name = "spotter"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-08-15"
 
-# Non-secret defaults. Override per environment in the Pages dashboard
-# (Settings -> Variables) or locally in .dev.vars.
+# Environment variables are deliberately NOT declared here: [vars] in this
+# file would override dashboard values. Set them per project instead:
 #
-#   SUPER_USER_EMAILS  Comma-separated emails allowed to register without an
-#                      invite and manage invites/users. Required.
-#   ALLOWED_ORIGINS    Extra origins accepted on mutating requests, comma-
-#                      separated. Only needed for local dev where the Astro dev
-#                      server (http://localhost:4321) proxies to wrangler.
-[vars]
-SUPER_USER_EMAILS = ""
-ALLOWED_ORIGINS = ""
+#   npx wrangler pages secret put SUPER_USER_EMAILS    --project-name spotter
+#   npx wrangler pages secret put GOOGLE_CLIENT_ID     --project-name spotter
+#   npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name spotter
+#
+#   SUPER_USER_EMAILS     Comma-separated emails that may sign up without an
+#                         invite and manage invites, accounts and storage.
+#   GOOGLE_CLIENT_ID      OAuth client ID from Google Cloud Console.
+#   GOOGLE_CLIENT_SECRET  OAuth client secret from Google Cloud Console.
+#
+# Local development reads the same names (plus the dev-only DEV_LOGIN and
+# ALLOWED_ORIGINS) from .dev.vars; see .dev.vars.example.
 
 [[d1_databases]]
 binding = "DB"

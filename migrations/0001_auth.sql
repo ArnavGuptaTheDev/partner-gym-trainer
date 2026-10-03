@@ -1,13 +1,13 @@
--- Accounts, sessions, invites and rate limiting.
+-- Accounts (Google sign-in only), sessions, invites and rate limiting.
 -- Times are unix milliseconds. IDs are random text ids generated in code.
 
 CREATE TABLE users (
   id           TEXT PRIMARY KEY,
+  google_sub   TEXT NOT NULL UNIQUE,              -- identity: Google's stable subject id
   email        TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  display_name TEXT NOT NULL,
-  pw_hash      TEXT NOT NULL,
-  pw_salt      TEXT NOT NULL,
-  pw_iter      INTEGER NOT NULL,
+  display_name TEXT NOT NULL,                     -- editable in Settings
+  google_name  TEXT NOT NULL DEFAULT '',          -- refreshed from Google on every login
+  avatar_url   TEXT,                              -- refreshed from Google on every login
   is_active    INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
   invite_id    TEXT,
   timezone     TEXT NOT NULL DEFAULT 'UTC',

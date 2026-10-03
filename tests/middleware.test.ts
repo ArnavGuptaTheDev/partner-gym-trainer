@@ -4,7 +4,7 @@ import { api, newUser } from './helpers';
 describe('request pipeline', () => {
   it('404s unknown endpoints and 405s wrong methods', async () => {
     expect((await api('GET', '/api/nope')).status).toBe(404);
-    expect((await api('DELETE', '/api/auth/login')).status).toBe(405);
+    expect((await api('DELETE', '/api/auth/me')).status).toBe(405);
   });
 
   it('rejects cross-origin mutations even with a valid session', async () => {
@@ -16,9 +16,10 @@ describe('request pipeline', () => {
   });
 
   it('requires a JSON content type and rejects malformed JSON', async () => {
-    const form = await api('POST', '/api/auth/login', { rawBody: 'email=a', headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+    const user = await newUser();
+    const form = await api('POST', '/api/pair/code', { cookie: user.cookie, rawBody: 'pairType=couple', headers: { 'content-type': 'application/x-www-form-urlencoded' } });
     expect(form.status).toBe(400);
-    const bad = await api('POST', '/api/auth/login', { rawBody: '{nope', headers: { 'content-type': 'application/json' } });
+    const bad = await api('POST', '/api/pair/code', { cookie: user.cookie, rawBody: '{nope', headers: { 'content-type': 'application/json' } });
     expect(bad.status).toBe(400);
   });
 

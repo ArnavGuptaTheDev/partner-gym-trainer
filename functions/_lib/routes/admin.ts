@@ -40,7 +40,7 @@ export function registerAdminRoutes(r: Router) {
       .run();
     // The raw token is only ever returned here; the DB stores its hash.
     return json(
-      { id, token, url: `${c.url.origin}/register?invite=${encodeURIComponent(token)}`, expiresAt },
+      { id, token, url: `${c.url.origin}/join?invite=${encodeURIComponent(token)}`, expiresAt },
       { status: 201 },
     );
   });

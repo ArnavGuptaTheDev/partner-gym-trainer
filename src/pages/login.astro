@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { auth, site } from '../content/copy';
+import GoogleButton from '../components/GoogleButton.astro';
+import { auth } from '../content/copy';
 ---
 <BaseLayout title={auth.signIn} bare>
   <div class="auth-hero">
@@ -8,39 +9,49 @@ import { auth, site } from '../content/copy';
     <h1>{auth.loginTitle}</h1>
     <p class="muted">{auth.loginLead}</p>
   </div>
-  <form id="login" class="card stack" novalidate>
-    <div class="field">
-      <label for="email">{auth.email}</label>
-      <input id="email" name="email" type="email" autocomplete="email" required />
-    </div>
-    <div class="field">
-      <label for="password">{auth.password}</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required />
-    </div>
+  <div class="card stack">
     <p class="alert alert--error" role="alert" id="error"></p>
-    <button class="btn btn--block" type="submit">{auth.loginButton}</button>
+    <GoogleButton id="google" />
+    <p class="center muted small" style="margin:0">{auth.inviteOnlyNote}</p>
+  </div>
+
+  <form id="dev-login" class="card card--soft stack" hidden style="margin-top:16px">
+    <h2>{auth.devTitle}</h2>
+    <p class="small muted" style="margin:0">{auth.devLead}</p>
+    <div class="field">
+      <label for="dev-email">{auth.devEmail}</label>
+      <input id="dev-email" name="email" type="email" value="alex@example.com" autocomplete="off" required />
+    </div>
+    <p class="alert alert--error" role="alert" id="dev-error"></p>
+    <button class="btn btn--ghost" type="submit">{auth.devButton}</button>
   </form>
-  <p class="center muted small" style="margin-top:20px">{auth.noAccount}</p>
-  <p class="center small"><a href="/register">{site.name}: first-time setup</a></p>
 </BaseLayout>
 
 <script>
   import { api, ApiError } from '../lib/api';
-  const form = document.getElementById('login') as HTMLFormElement;
-  const error = document.getElementById('error')!;
+  import { auth } from '../content/copy';
+
+  const params = new URLSearchParams(location.search);
+  const next = params.get('next');
+  const code = params.get('error');
+  if (code) document.getElementById('error')!.textContent = auth.errors[code] ?? auth.errors.google;
+  // Carried through to the server, which validates it again.
+  if (next) (document.getElementById('google') as HTMLAnchorElement).href = `/api/auth/google/start?next=${encodeURIComponent(next)}`;
+
+  // Shown only when the API reports dev login enabled (DEV_LOGIN on localhost).
+  const form = document.getElementById('dev-login') as HTMLFormElement;
+  api('GET', '/api/auth/dev-login', undefined, { redirectOn401: false })
+    .then(() => (form.hidden = false))
+    .catch(() => {});
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const error = document.getElementById('dev-error')!;
     error.textContent = '';
-    const fd = new FormData(form);
-    const button = form.querySelector('button')!;
-    button.disabled = true;
     try {
-      await api('POST', '/api/auth/login', { email: fd.get('email'), password: fd.get('password') }, { redirectOn401: false });
-      const next = new URLSearchParams(location.search).get('next');
-      location.href = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      await api('POST', '/api/auth/dev-login', { email: new FormData(form).get('email') }, { redirectOn401: false });
+      location.href = '/';
     } catch (err) {
       error.textContent = err instanceof ApiError ? err.message : String(err);
-      button.disabled = false;
     }
   });
 </script>

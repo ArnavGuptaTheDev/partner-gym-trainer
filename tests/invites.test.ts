@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { api, createInvite, newUser, PASSWORD, superCookie, uniqueEmail } from './helpers';
+import { api, createInvite, googleLogin, newUser, superCookie, uniqueEmail, uniqueSub } from './helpers';
 
 describe('invite management', () => {
   it('requires a super user', async () => {
@@ -15,7 +15,7 @@ describe('invite management', () => {
     const boss = await superCookie();
     const res = await api('POST', '/api/admin/invites', { cookie: boss, body: { note: 'for Alex' } });
     expect(res.status).toBe(201);
-    expect(res.data.url).toContain(`/register?invite=${res.data.token}`);
+    expect(res.data.url).toContain(`/join?invite=${res.data.token}`);
     const days = (res.data.expiresAt - Date.now()) / 86_400_000;
     expect(days).toBeGreaterThan(6.99);
     expect(days).toBeLessThanOrEqual(7);
@@ -29,7 +29,7 @@ describe('invite management', () => {
     const boss = await superCookie();
     const used = await createInvite(boss, 'used one');
     const email = uniqueEmail('jo');
-    await api('POST', '/api/auth/register', { body: { email, password: PASSWORD, displayName: 'Jo', inviteToken: used.token } });
+    await googleLogin({ sub: uniqueSub(), email, name: 'Jo' }, { invite: used.token });
     const active = await createInvite(boss, 'active one');
 
     const list = await api('GET', '/api/admin/invites?limit=50', { cookie: boss });
@@ -47,10 +47,8 @@ describe('invite management', () => {
     const inv = await createInvite(boss);
     expect((await api('DELETE', `/api/admin/invites/${inv.id}`, { cookie: boss })).status).toBe(200);
     expect((await api('GET', `/api/invites/${inv.token}`)).data.valid).toBe(false);
-    const reg = await api('POST', '/api/auth/register', {
-      body: { email: uniqueEmail(), password: PASSWORD, displayName: 'X', inviteToken: inv.token },
-    });
-    expect(reg.status).toBe(410);
+    const signup = await googleLogin({ sub: uniqueSub(), email: uniqueEmail() }, { invite: inv.token });
+    expect(signup.location).toBe('/invite-only');
     expect((await api('DELETE', `/api/admin/invites/${inv.id}`, { cookie: boss })).status).toBe(409);
     expect((await api('DELETE', '/api/admin/invites/nope', { cookie: boss })).status).toBe(404);
   });
@@ -58,9 +56,7 @@ describe('invite management', () => {
   it('cannot revoke an invite that has been used', async () => {
     const boss = await superCookie();
     const inv = await createInvite(boss);
-    await api('POST', '/api/auth/register', {
-      body: { email: uniqueEmail(), password: PASSWORD, displayName: 'X', inviteToken: inv.token },
-    });
+    await googleLogin({ sub: uniqueSub(), email: uniqueEmail() }, { invite: inv.token });
     expect((await api('DELETE', `/api/admin/invites/${inv.id}`, { cookie: boss })).status).toBe(409);
   });
 

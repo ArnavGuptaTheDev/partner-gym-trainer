@@ -1,21 +1,13 @@
-// Password hashing and token helpers, WebCrypto only.
-
-export const PBKDF2_ITERATIONS = 100_000;
+// Token and hashing helpers, WebCrypto only.
 
 const enc = new TextEncoder();
 
-export function toB64(bytes: ArrayBuffer | Uint8Array): string {
+/** Base64url without padding (RFC 4648 §5), as used by PKCE and JWTs. */
+export function b64url(bytes: ArrayBuffer | Uint8Array): string {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let s = '';
   for (const b of arr) s += String.fromCharCode(b);
-  return btoa(s);
-}
-
-export function fromB64(s: string): Uint8Array {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function randomBytes(n: number): Uint8Array {
@@ -23,9 +15,7 @@ export function randomBytes(n: number): Uint8Array {
 }
 
 /** URL-safe random token with `bytes` bytes of entropy. */
-export function randomToken(bytes = 32): string {
-  return toB64(randomBytes(bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+export const randomToken = (bytes = 32) => b64url(randomBytes(bytes));
 
 export const randomId = () => crypto.randomUUID();
 
@@ -34,27 +24,18 @@ export async function sha256Hex(input: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function pbkdf2(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
-  return new Uint8Array(bits);
+/** PKCE S256 code challenge for a verifier (RFC 7636 §4.2). */
+export async function pkceChallenge(verifier: string): Promise<string> {
+  return b64url(await crypto.subtle.digest('SHA-256', enc.encode(verifier)));
 }
 
-export async function hashPassword(password: string) {
-  const salt = randomBytes(16);
-  const hash = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
-  return { hash: toB64(hash), salt: toB64(salt), iterations: PBKDF2_ITERATIONS };
-}
-
-export async function verifyPassword(password: string, hashB64: string, saltB64: string, iterations: number) {
-  const actual = await pbkdf2(password, fromB64(saltB64), iterations);
-  return timingSafeEqual(actual, fromB64(hashB64));
-}
-
-export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+/** Constant-time string comparison. */
+export function timingSafeEqual(a: string, b: string): boolean {
+  const x = enc.encode(a);
+  const y = enc.encode(b);
+  if (x.length !== y.length) return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
   return diff === 0;
 }
 

@@ -11,6 +11,7 @@ An invite-only, mobile-first gym app for two. Partners (a couple or gym buddies)
 | Database | Cloudflare D1, versioned SQL migrations in `migrations/` |
 | Photos | Private Cloudflare R2 bucket, only served via the authenticated `/api/photos/:id` |
 | Fonts | Bricolage Grotesque (display) + Inter (text), self-hosted via Fontsource, Latin subset, `font-display: swap` |
+| Auth | Google sign-in (OAuth 2.0 authorization code + PKCE, server-side), invite-only, sessions in D1 |
 | Tests | Vitest + `@cloudflare/vitest-pool-workers` (real workerd + D1 + R2 locally) |
 
 ## Repository layout
@@ -38,7 +39,7 @@ Requirements: Node 20+ (tested on Node 24) and npm.
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars          # sets SUPER_USER_EMAILS for local dev
+cp .dev.vars.example .dev.vars          # dev settings; add Google credentials if you have them
 npm run db:migrate:local                # create local D1 tables
 npm run db:seed:local                   # optional: two paired demo users + a week of data
 npm run dev                             # API on :8788, Astro on :4321
@@ -46,8 +47,9 @@ npm run dev                             # API on :8788, Astro on :4321
 
 Open http://localhost:4321.
 
-- **Demo logins:** `alex@example.com` and `sam@example.com`, password `spotter-demo-1`. Alex is listed in `.dev.vars.example` as a super user, so you can try the Admin page. Alex's first Home load unlocks the 7-day-streak milestone.
-- **Starting from scratch:** go to `/register` and sign up with an email listed in `SUPER_USER_EMAILS`. Super users don't need an invite.
+- **Demo users (no Google needed):** the seed creates `alex@example.com` and `sam@example.com` with fake Google IDs, so they can't sign in through Google. With `DEV_LOGIN=true` in `.dev.vars` (the default in the example file), `/login` shows a **Dev login** form that signs you in as any existing user by email. Alex is a super user in `.dev.vars.example`, so you can try the Admin page, and Alex's first Home load unlocks the 7-day-streak milestone.
+- **Dev login is local only:** the endpoint returns 404 unless `DEV_LOGIN` is exactly `true` *and* the request is addressed to `localhost` or `127.0.0.1`. It can't be switched on for a deployed site, even by mistake.
+- **Real Google sign-in locally:** set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.dev.vars` (see [Google sign-in setup](#google-sign-in-setup)). Then sign in with an email listed in `SUPER_USER_EMAILS`; super users don't need an invite.
 - **How `npm run dev` works:** it runs `wrangler pages dev dist --port 8788` for the API and `astro dev` for hot-reloaded pages. Astro proxies `/api` to wrangler. That's why `ALLOWED_ORIGINS=http://localhost:4321` is in `.dev.vars`: the API rejects cross-origin writes otherwise.
 - **When you change the API:** wrangler watches `functions/` and reloads.
 - **Production-like run:** `npm run preview` builds the site and serves everything from wrangler on :8788.
@@ -104,15 +106,19 @@ You need a Cloudflare account; everything below fits the free plan. Log in once 
    npm run db:migrate:remote
    ```
 
-4. **Set `SUPER_USER_EMAILS`.** In the dashboard, open Workers & Pages → spotter → Settings → Variables and Secrets. Add `SUPER_USER_EMAILS` with a comma-separated list of emails, e.g. `you@example.com,friend@example.com`, for both Production and Preview. You can also set it from the CLI:
+4. **Create the Google OAuth client.** Follow [Google sign-in setup](#google-sign-in-setup) and register your production redirect URI.
+
+5. **Set the secrets**
 
    ```bash
-   npx wrangler pages secret put SUPER_USER_EMAILS --project-name spotter
+   npx wrangler pages secret put SUPER_USER_EMAILS    --project-name spotter   # e.g. you@gmail.com,friend@gmail.com
+   npx wrangler pages secret put GOOGLE_CLIENT_ID     --project-name spotter
+   npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name spotter
    ```
 
-   Leave `ALLOWED_ORIGINS` empty in production. The site and API share one origin there.
+   These aren't in `wrangler.toml` on purpose: `[vars]` there would override dashboard values. Never set `DEV_LOGIN` or `ALLOWED_ORIGINS` in production. The site and API share one origin there, and dev login refuses any non-localhost host anyway.
 
-5. **Deploy**
+6. **Deploy**
 
    ```bash
    npm run deploy
@@ -120,14 +126,44 @@ You need a Cloudflare account; everything below fits the free plan. Log in once 
 
    The D1 and R2 bindings come from `wrangler.toml` (`DB` and `PHOTOS`). If you deploy through the dashboard's Git integration instead, use build command `npm run build` and output directory `dist`, and check that the bindings appear under Settings → Bindings.
 
-6. **First login.** Visit `/register` on your deployed site and sign up with a super-user email. Then go to Settings → Admin to create invite links for everyone else.
+7. **First sign-in.** Open your site, choose **Continue with Google**, and use a Google account whose email is in `SUPER_USER_EMAILS`. Then go to Settings → Admin to create invite links for everyone else.
 
 ### Environment variables
 
-| Name | Required | Purpose |
+| Name | Where | Purpose |
 |---|---|---|
-| `SUPER_USER_EMAILS` | yes | Comma-separated. These emails can register without an invite and manage invites, accounts and storage. Checked on every request, so removing an email revokes super-user rights immediately. |
-| `ALLOWED_ORIGINS` | dev only | Extra origins accepted on mutating requests (the Astro dev server). |
+| `SUPER_USER_EMAILS` | secret (required) | Comma-separated. A Google account with one of these emails can sign up without an invite and manage invites, accounts and storage. Checked on every request, so removing an email revokes super-user rights immediately. |
+| `GOOGLE_CLIENT_ID` | secret (required) | OAuth client ID from Google Cloud Console. |
+| `GOOGLE_CLIENT_SECRET` | secret (required) | OAuth client secret from Google Cloud Console. |
+| `DEV_LOGIN` | `.dev.vars` only | `true` enables the seeded-user dev login, which also requires a localhost request. |
+| `ALLOWED_ORIGINS` | `.dev.vars` only | Extra origins accepted on mutating requests (the Astro dev server). |
+
+## Google sign-in setup
+
+Sign-in is Google only, using the server-side authorization code flow with PKCE. You need one OAuth client; local and production can share it.
+
+1. **Create a project.** In [Google Cloud Console](https://console.cloud.google.com/), create a project (or pick an existing one), e.g. "Spotter".
+2. **Set up the consent screen.** Open **Google Auth Platform** (APIs & Services → OAuth consent screen) and click **Get started**.
+   - **App information:** app name "Spotter" and a support email.
+   - **Audience:** **External**, so personal Gmail accounts can sign in.
+   - **Contact information:** your email.
+   - **Data access:** add the scopes `openid`, `.../auth/userinfo.email` and `.../auth/userinfo.profile`. These are non-sensitive, so Google doesn't need to review the app.
+3. **Choose who can sign in.**
+   - **Testing** (the default): only Google accounts listed under **Audience → Test users** can sign in, up to 100. This suits a small invite-only app; add each person's Google address as they join.
+   - **In production** (click **Publish app**): any Google account can reach the consent screen. Spotter's invite-only rules still decide who gets an account. With only the basic scopes above, publishing doesn't require verification.
+4. **Create the client.** Go to **Clients → Create client**, choose **Web application**, and add these **Authorized redirect URIs**. They must match exactly: scheme, host, port, path, and no trailing slash.
+
+   | Environment | Redirect URI |
+   |---|---|
+   | Local (`npm run dev`) | `http://localhost:4321/api/auth/google/callback` |
+   | Local (`npm run preview`, optional) | `http://localhost:8788/api/auth/google/callback` |
+   | Production (Pages domain) | `https://spotter.pages.dev/api/auth/google/callback` (use your project's actual `*.pages.dev` name) |
+   | Production (custom domain, if any) | `https://your-domain.example/api/auth/google/callback` |
+
+   You don't need any **Authorized JavaScript origins**; the browser never talks to Google's APIs directly.
+5. **Copy the credentials.** Copy the **Client ID** and **Client secret**; the secret is only shown in full once, so download the JSON if offered. Put them in `.dev.vars` for local use, and set them as Pages secrets for production (deploy step 5).
+
+The app builds the redirect URI from the address the request came in on, so each deployment uses its own origin. Per-deployment preview URLs (`<hash>.spotter.pages.dev`) are different origins: Google sign-in only works on them if you register those URIs too. Use the dev login or the production domain instead.
 
 | Binding | Type | Name |
 |---|---|---|
@@ -149,10 +185,29 @@ All user-facing text lives in **`src/content/copy.ts`**, grouped by screen (`aut
 ## How it works
 
 ### Auth and access
-- **Passwords:** PBKDF2-SHA256 with 100,000 iterations (the Workers WebCrypto maximum) and a random 16-byte salt per user, compared in constant time.
+
+Sign-in is Google only (`functions/_lib/oauth.ts`, `functions/_lib/routes/auth.ts`). There's no client library.
+
+1. **`GET /api/auth/google/start`** generates `state`, a PKCE verifier and a nonce. It stores them, plus any invite token and the `next` path, in a short-lived cookie (`spotter_oauth`: HttpOnly, Secure, SameSite=Lax, 10 minutes, scoped to `/api/auth/google`). Then it redirects to Google with scopes `openid email profile`.
+2. **`GET /api/auth/google/callback`** compares `state` with the cookie in constant time and clears the cookie in every case. It exchanges the code, with the client secret and PKCE verifier, at Google's token endpoint, then checks the ID token's claims:
+   - `aud` is our client ID,
+   - `iss` is Google,
+   - `exp` is in the future,
+   - `nonce` matches,
+   - `email_verified` is true.
+
+   The token's signature isn't re-checked: it came straight from Google over TLS in exchange for our client secret, which OIDC Core §3.1.3.7 allows.
+3. **Account resolution.** Users are identified by Google `sub` only; email is never used to match an account.
+   - **Known `sub`:** log in, refreshing email, Google name and avatar. Deactivated accounts are refused here. The editable `display_name` is left alone.
+   - **Email in `SUPER_USER_EMAILS`:** create the account.
+   - **Valid invite in the cookie:** create the account and claim the invite in one transaction, so two simultaneous callbacks can't both use it.
+   - **Otherwise:** create nothing and show `/invite-only`.
+4. **Redirect.** On success, the user goes to `next`. That's only accepted if it's a same-origin path starting with a single `/`; anything else falls back to `/`.
+
+Other rules:
 - **Sessions:** 32-byte random tokens. Only their SHA-256 is stored in D1. They're sent as `HttpOnly; Secure; SameSite=Lax` cookies and last 30 days, sliding (renewed when under 15 days remain).
-- **Rate limits:** fixed-window counters in D1, per IP. Login: 10 per 15 min. Register: 5 per hour. Pairing-code attempts: 10 per 15 min.
-- **Invites:** single use, expire after 7 days, stored hashed. The link is shown once, at creation. Super users can list invites (with who used each), revoke them, and deactivate accounts. Deactivation signs the user out everywhere.
+- **Rate limits:** fixed-window counters in D1, per IP. OAuth start and callback: 30 per 15 min each. Pairing-code attempts: 10 per 15 min.
+- **Invites:** single use, expire after 7 days, stored hashed. The `/join?invite=…` link is shown once, at creation. Super users can list invites (with who used each), revoke them, and deactivate accounts. Deactivation signs the user out everywhere.
 
 ### Authorization middleware
 
@@ -191,10 +246,8 @@ Unpairing deletes the pair row. Chat, reactions, nudges and notes cascade away w
   - Chat polls every 5 s, only while the tab is visible.
   - The unread badge polls `/api/pulse` every 30 s, only while the tab is visible.
   - Two people chatting for an hour is about 1,500 requests; the free plan allows 100,000 a day.
-- **CPU:** PBKDF2 at 100k iterations is the heaviest work (login and register only). Everything else is small JSON in and out.
+- **CPU:** every request is small JSON in and out. Sign-in is one outbound call to Google plus a SHA-256.
 - **Storage:** see Admin → Photo storage (R2 free tier: 10 GB).
-
-> Note: on the Workers free plan the CPU limit is 10 ms per request. PBKDF2 at 100k iterations can go slightly over on some requests. Cloudflare tolerates occasional overruns, but if logins start failing with exceeded-CPU errors, the fix is the Workers Paid plan. Lowering the iteration count would go against the spec.
 
 ## Tests
 
@@ -202,11 +255,11 @@ Unpairing deletes the pair row. Chat, reactions, nudges and notes cascade away w
 npm test
 ```
 
-The tests run inside workerd with a real (in-memory) D1 database and R2 bucket, and apply the actual migrations.
+The tests run inside workerd with a real (in-memory) D1 database and R2 bucket, and apply the actual migrations. Google's token endpoint is faked in `tests/helpers.ts`: only that URL is intercepted, and each authorization code maps to the ID-token claims the test chose.
 
 | File | Covers |
 |---|---|
-| `auth.test.ts` | Registration (super-user and invite paths), password hashing, cookie flags, hashed sessions, logout, expiry, rate limits, deactivation |
+| `auth.test.ts` | OAuth start (PKCE, cookie flags), callback: state mismatch, unverified email, wrong `aud`/`iss`/expiry/nonce, no invite, invite used exactly once (including two concurrent callbacks), super-user bootstrap, deactivated user, existing-user login and profile refresh, never matching by email, `next` validation, rate limits; sessions; dev login enabled only on localhost |
 | `invites.test.ts` | Super-user-only access, 7-day expiry, single use, list/revoke, pagination |
 | `pairing.test.ts` | Codes, one-to-one rules (API and schema trigger), stale codes, unpair/re-pair, settings |
 | `authz.test.ts` | The `:who` middleware (unit and through the API), plan edit rules, third-party isolation, post-unpair access |
