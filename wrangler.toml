@@ -26,5 +26,5 @@ database_id = "2abff030-c047-4098-a8ac-86114e8e45a5"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
-binding = "spotter_photos"
+binding = "PHOTOS"
 bucket_name = "spotter-photos"
