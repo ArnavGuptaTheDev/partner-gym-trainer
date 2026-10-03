@@ -182,6 +182,7 @@ img { max-width: 100%; display: block; }
 .btn:active { transform: translateY(1px) scale(0.99); }
 .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
 .btn--block { width: 100%; }
+.btn:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 .btn--ghost { background: transparent; color: var(--text); border-color: var(--line); }
 .btn--sun { background: var(--sun); color: var(--sun-ink); }
 .btn--small { min-height: 36px; padding: 0 14px; font-size: 0.9rem; }
@@ -335,6 +336,33 @@ legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding: 0; }
   display: grid; place-items: center; font-size: 2.2rem; transform: rotate(-6deg);
   box-shadow: 10px 10px 0 var(--sun);
 }
+
+/* ---------- Photos ---------- */
+
+.photo-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.photo-tile {
+  appearance: none; border: 0; padding: 0; background: var(--surface-2); cursor: pointer;
+  display: block; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; position: relative;
+}
+.photo-tile img { width: 100%; height: 100%; object-fit: cover; }
+.photo-tile.is-picked { outline: 4px solid var(--accent); outline-offset: -4px; }
+.pick-badge {
+  position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 0.8rem;
+  display: grid; place-items: center;
+}
+
+.modal {
+  border: 0; padding: 0; background: transparent; color: var(--text);
+  width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 24px);
+}
+.modal::backdrop { background: rgba(20, 10, 16, 0.7); }
+.modal-body { background: var(--surface); border-radius: var(--radius); padding: 16px; position: relative; }
+.modal-close { position: absolute; top: 6px; right: 6px; z-index: 2; background: var(--surface); }
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 28px; }
+.compare figure { margin: 0; text-align: center; }
+.compare img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }

@@ -1,0 +1,9 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import PhotosView from '../islands/PhotosView';
+import { photos } from '../content/copy';
+---
+<AppLayout title={photos.title} tab="photos">
+  <h1>{photos.title}</h1>
+  <PhotosView client:load />
+</AppLayout>

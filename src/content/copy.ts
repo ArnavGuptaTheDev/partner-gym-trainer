@@ -220,6 +220,29 @@ export const log = {
   partnerReadOnly: (name: string) => `You’re viewing ${name}’s day.`,
 };
 
+export const photos = {
+  title: 'Photos',
+  add: 'Add today’s gym photo',
+  adding: 'Shrinking & uploading…',
+  captionLabel: 'Caption (optional)',
+  captionPlaceholder: 'PR on squats!',
+  upload: 'Post photo',
+  privacyNote: 'Photos are resized and stripped of location data before upload. Only you and your partner can see them.',
+  empty: 'No gym photos yet. Snap one after your next session!',
+  emptyPartner: (name: string) => `${name} hasn’t posted any gym photos yet.`,
+  loadMore: 'Load older photos',
+  compare: 'Compare',
+  compareHint: 'Pick two photos for a before/after.',
+  compareDone: 'Show comparison',
+  compareCancel: 'Cancel',
+  before: 'Before',
+  after: 'After',
+  close: 'Close',
+  delete: 'Delete photo',
+  deleteConfirm: 'Delete this photo for good?',
+  photoAlt: (who: string, date: string) => `${who}’s gym photo from ${date}`,
+};
+
 export const settings = {
   themeTitle: 'Theme',
   themeSystem: 'Auto',
