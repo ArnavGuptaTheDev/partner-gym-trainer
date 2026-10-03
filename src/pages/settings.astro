@@ -1,10 +1,12 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
+import PairingPanel from '../islands/PairingPanel';
 import { auth, nav, settings } from '../content/copy';
 ---
 <AppLayout title={nav.settings}>
   <h1>{nav.settings}</h1>
   <div class="stack">
+    <PairingPanel client:load />
     <section class="card stack" aria-labelledby="theme-h">
       <h2 id="theme-h">{settings.themeTitle}</h2>
       <fieldset>

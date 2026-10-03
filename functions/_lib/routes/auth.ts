@@ -1,6 +1,7 @@
 import { hashPassword, randomId, sha256Hex, verifyPassword, PBKDF2_ITERATIONS } from '../crypto';
 import { conflict, HttpError, json, readJson } from '../http';
 import { isSuperEmail } from '../middleware';
+import { pairView } from './pair';
 import { rateLimit } from '../ratelimit';
 import type { Router } from '../router';
 import { clearSessionCookie, createSession, readSessionToken, sessionCookie } from '../session';
@@ -36,6 +37,7 @@ export function meResponse(c: Ctx) {
       units: c.user.units,
       isSuper: c.isSuper,
     },
+    pair: pairView(c),
   };
 }
 

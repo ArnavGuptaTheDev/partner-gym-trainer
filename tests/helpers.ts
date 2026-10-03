@@ -83,4 +83,21 @@ export async function newUser(name = 'Sam'): Promise<TestUser> {
   return { id: res.data.user.id, email, cookie: res.cookie, password: PASSWORD };
 }
 
+/** Pairs two users via a code; `a` creates it, `b` joins. */
+export async function pairUp(a: TestUser, b: TestUser, pairType: 'couple' | 'friends' = 'friends') {
+  const code = await api('POST', '/api/pair/code', { cookie: a.cookie, body: { pairType } });
+  if (code.status !== 201) throw new Error(`code failed: ${code.status}`);
+  const join = await api('POST', '/api/pair/join', { cookie: b.cookie, body: { code: code.data.code } });
+  if (join.status !== 201) throw new Error(`join failed: ${join.status} ${JSON.stringify(join.data)}`);
+  return join.data.pairId as string;
+}
+
+/** Two freshly registered users, already paired. */
+export async function newPair(pairType: 'couple' | 'friends' = 'friends') {
+  const a = await newUser('Alex');
+  const b = await newUser('Blake');
+  const pairId = await pairUp(a, b, pairType);
+  return { a, b, pairId };
+}
+
 export { env, PASSWORD };

@@ -41,6 +41,7 @@ export interface Ctx {
   /** The caller's active pair, if any. */
   pair: Pair | null;
   partnerId: string | null;
+  partnerName: string | null;
   /** Set by the `who` middleware: the user whose data the route touches. */
   subjectId: string;
   isSelf: boolean;

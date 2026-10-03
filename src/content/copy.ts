@@ -83,6 +83,34 @@ export const tone: Record<PairType, Record<string, string>> = {
   },
 };
 
+export const pairing = {
+  title: 'Your spotter',
+  unpairedLead: 'Spotter is for exactly two. Make a code and send it to your partner, or enter theirs.',
+  typeLegend: 'You two are…',
+  couple: 'A couple 💞',
+  friends: 'Gym buddies 🤜🤛',
+  makeCode: 'Make a pairing code',
+  yourCode: 'Your code',
+  codeHint: 'Send this to your partner. It works once and expires in 24 hours.',
+  share: 'Share code',
+  shareText: (code: string) => `Be my Spotter! Enter code ${code} in the app.`,
+  cancelCode: 'Cancel code',
+  haveCode: 'Got a code from your partner?',
+  codeLabel: 'Partner’s code',
+  join: 'Pair up',
+  pairedWith: 'Paired with',
+  pairTypeLabel: 'Pair type',
+  togetherSince: 'Together since',
+  togetherHint: 'Shows a days-together counter on Home.',
+  selfEdit: 'Let us edit our own plans',
+  selfEditHint: 'By default only your partner can change your plan.',
+  save: 'Save',
+  saved: 'Saved',
+  unpair: 'Unpair',
+  unpairConfirm: 'Unpair? Your chat history goes away. You each keep your own logs and photos.',
+  welcome: 'You’re in! Pair up with your partner to get started.',
+};
+
 export const settings = {
   themeTitle: 'Theme',
   themeSystem: 'Auto',

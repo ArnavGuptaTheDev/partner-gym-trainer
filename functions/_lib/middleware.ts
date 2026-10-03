@@ -4,7 +4,7 @@ import { sha256Hex } from './crypto';
 import { forbidden, notFound, unauthorized } from './http';
 import type { RouteOpts } from './router';
 import { readSessionToken, SESSION_RENEW_MS, SESSION_TTL_MS } from './session';
-import type { Ctx, Env, User } from './types';
+import type { Ctx, Env, Pair, User } from './types';
 
 export function superEmails(env: Env): string[] {
   return (env.SUPER_USER_EMAILS ?? '')
@@ -33,12 +33,19 @@ export async function authenticate(c: Ctx): Promise<void> {
   if (!token) throw unauthorized();
   const hash = await sha256Hex(token);
 
-  const [userRes] = await c.env.DB.batch([
+  const [userRes, pairRes] = await c.env.DB.batch([
     c.env.DB.prepare(
       `SELECT u.id, u.email, u.display_name, u.is_active, u.timezone, u.units, u.created_at, s.expires_at
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.token_hash = ?1 AND s.expires_at > ?2`,
     ).bind(hash, c.now),
+    c.env.DB.prepare(
+      `SELECT p.*, u.display_name AS partner_name
+       FROM sessions s
+       JOIN pairs p ON p.user_a_id = s.user_id OR p.user_b_id = s.user_id
+       JOIN users u ON u.id = CASE WHEN p.user_a_id = s.user_id THEN p.user_b_id ELSE p.user_a_id END
+       WHERE s.token_hash = ?1`,
+    ).bind(hash),
   ]);
 
   const row = userRes.results[0] as (User & { expires_at: number }) | undefined;
@@ -48,8 +55,17 @@ export async function authenticate(c: Ctx): Promise<void> {
   c.user = user;
   c.sessionHash = hash;
   c.isSuper = isSuperEmail(c.env, user.email);
-  c.pair = null;
-  c.partnerId = null;
+  const pairRow = pairRes.results[0] as (Pair & { partner_name: string }) | undefined;
+  if (pairRow) {
+    const { partner_name, ...pair } = pairRow;
+    c.pair = pair;
+    c.partnerId = pair.user_a_id === user.id ? pair.user_b_id : pair.user_a_id;
+    c.partnerName = partner_name;
+  } else {
+    c.pair = null;
+    c.partnerId = null;
+    c.partnerName = null;
+  }
 
   // Sliding expiry, written at most about twice a month per session.
   if (expires_at - c.now < SESSION_RENEW_MS) {
