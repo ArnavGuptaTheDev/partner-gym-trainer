@@ -5,15 +5,15 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "astro dev",
-    "dev:api": "wrangler pages dev dist --port 8788",
+    "dev:api": "wrangler dev --port 8788",
     "build": "astro build",
-    "preview": "astro build && wrangler pages dev dist",
-    "typecheck": "tsc -p functions/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "preview": "astro build && wrangler dev --port 8788",
+    "typecheck": "tsc -p worker/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply spotter --local",
     "db:migrate:remote": "wrangler d1 migrations apply spotter --remote",
     "db:seed:local": "node scripts/seed.mjs",
-    "deploy": "astro build && wrangler pages deploy dist"
+    "deploy": "astro build && wrangler deploy"
   },
   "type": "module",
   "dependencies": {

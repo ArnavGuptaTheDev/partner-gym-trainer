@@ -1,6 +1,8 @@
 export interface Env {
   DB: D1Database;
   PHOTOS: R2Bucket;
+  /** The built site in dist/ (Workers Static Assets). */
+  ASSETS: Fetcher;
   SUPER_USER_EMAILS?: string;
   ALLOWED_ORIGINS?: string;
   GOOGLE_CLIENT_ID?: string;

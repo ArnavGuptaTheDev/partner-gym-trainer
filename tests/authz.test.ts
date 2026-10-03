@@ -1,7 +1,7 @@
 // The shared authorization middleware: `:who` resolution and read/write rules.
 import { describe, expect, it } from 'vitest';
-import { resolveWho } from '../functions/_lib/middleware';
-import type { Ctx, Pair } from '../functions/_lib/types';
+import { resolveWho } from '../worker/middleware';
+import type { Ctx, Pair } from '../worker/types';
 import { api, newPair, newUser, pairUp } from './helpers';
 
 const PLAN = { calorieGoal: 'deficit', calorieTarget: 1800, meals: [], exercises: [] };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, isoDate } from '../functions/_lib/dates';
-import { currentStreak, intersect, qualifyingMilestones } from '../functions/_lib/milestones';
+import { addDays, isoDate } from '../worker/dates';
+import { currentStreak, intersect, qualifyingMilestones } from '../worker/milestones';
 import { api, env, newPair, newUser, type TestUser } from './helpers';
 
 const TODAY = isoDate(Date.now());

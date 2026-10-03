@@ -5,5 +5,5 @@
     "jsxImportSource": "preact"
   },
   "include": [".astro/types.d.ts", "src/**/*"],
-  "exclude": ["dist", "functions", "tests"]
+  "exclude": ["dist", "worker", "tests"]
 }

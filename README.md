@@ -1,13 +1,13 @@
 # Spotter
 
-An invite-only, mobile-first gym app for two. Partners (a couple or gym buddies) set each other's diet and workout plans, log their days, share gym photos, chat, and keep a shared streak alive. It runs entirely on Cloudflare's free tier: Pages, Pages Functions, D1 and R2.
+An invite-only, mobile-first gym app for two. Partners (a couple or gym buddies) set each other's diet and workout plans, log their days, share gym photos, chat, and keep a shared streak alive. It runs entirely on Cloudflare's free tier: one Worker (with static assets), D1 and R2.
 
 ## Stack
 
 | Layer | What |
 |---|---|
 | Frontend | Astro (`output: "static"`), Preact islands for stateful screens, vanilla TS for small scripts |
-| API | One Cloudflare Pages Function (`functions/api/[[path]].ts`) with a small router and shared middleware in `functions/_lib` |
+| API | One Cloudflare Worker (`worker/index.ts`) with a small router and shared middleware in `worker/`; the built site is served as Workers Static Assets |
 | Database | Cloudflare D1, versioned SQL migrations in `migrations/` |
 | Photos | Private Cloudflare R2 bucket, only served via the authenticated `/api/photos/:id` |
 | Fonts | Bricolage Grotesque (display) + Inter (text), self-hosted via Fontsource, Latin subset, `font-display: swap` |
@@ -24,9 +24,9 @@ src/
   layouts/, components/
   lib/                 client helpers (api, image compression, units, hooks)
   styles/              design tokens (light/dark), fonts
-functions/
-  api/[[path]].ts      Pages Function entry for /api/*
-  _lib/                router, middleware, validation, crypto, routes/*
+worker/
+  index.ts             Worker entry: /api/* → API, everything else → static assets
+  app.ts, middleware.ts, oauth.ts, routes/*, …   router, middleware, validation, crypto
 migrations/            0001…0007 D1 migrations
 scripts/               dev runner, seed script, icon generator
 tests/                 API tests (auth, invites, pairing, authorization, …)
@@ -50,9 +50,10 @@ Open http://localhost:4321.
 - **Demo users (no Google needed):** the seed creates `alex@example.com` and `sam@example.com` with fake Google IDs, so they can't sign in through Google. With `DEV_LOGIN=true` in `.dev.vars` (the default in the example file), `/login` shows a **Dev login** form that signs you in as any existing user by email. Alex is a super user in `.dev.vars.example`, so you can try the Admin page, and Alex's first Home load unlocks the 7-day-streak milestone.
 - **Dev login is local only:** the endpoint returns 404 unless `DEV_LOGIN` is exactly `true` *and* the request is addressed to `localhost` or `127.0.0.1`. It can't be switched on for a deployed site, even by mistake.
 - **Real Google sign-in locally:** set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.dev.vars` (see [Google sign-in setup](#google-sign-in-setup)). Then sign in with an email listed in `SUPER_USER_EMAILS`; super users don't need an invite.
-- **How `npm run dev` works:** it runs `wrangler pages dev dist --port 8788` for the API and `astro dev` for hot-reloaded pages. Astro proxies `/api` to wrangler. That's why `ALLOWED_ORIGINS=http://localhost:4321` is in `.dev.vars`: the API rejects cross-origin writes otherwise.
-- **When you change the API:** wrangler watches `functions/` and reloads.
-- **Production-like run:** `npm run preview` builds the site and serves everything from wrangler on :8788.
+- **How `npm run dev` works:** it runs `wrangler dev --port 8788` for the API and `astro dev` for hot-reloaded pages. Astro proxies `/api` to wrangler. That's why `ALLOWED_ORIGINS=http://localhost:4321` is in `.dev.vars`: the API rejects cross-origin writes otherwise.
+- **When you change the API:** wrangler watches `worker/` and reloads.
+- **Production-like run:** `npm run preview` builds the site and serves everything from the Worker on :8788.
+- **Local data is keyed by `database_id`:** if you change the ID in `wrangler.toml`, local dev gets a fresh, empty database. Re-run `npm run db:migrate:local` and `npm run db:seed:local`.
 
 Local D1 and R2 data live in `.wrangler/state`. Delete that folder to start over, then re-run the migrate and seed commands.
 
@@ -64,10 +65,10 @@ Local D1 and R2 data live in `.wrangler/state`. Delete that folder to start over
 | `npm run build` | Static build into `dist/` |
 | `npm run preview` | Build, then serve site + API with wrangler |
 | `npm test` | Run the test suite (workerd, in-memory D1/R2) |
-| `npm run typecheck` | Type-check functions/tests and the frontend |
+| `npm run typecheck` | Type-check the Worker, tests and the frontend |
 | `npm run db:migrate:local` / `db:migrate:remote` | Apply D1 migrations |
 | `npm run db:seed:local` | Seed demo data (local only) |
-| `npm run deploy` | Build and `wrangler pages deploy dist` |
+| `npm run deploy` | Build and `wrangler deploy` |
 
 ## Database migrations
 
@@ -81,9 +82,9 @@ npm run db:migrate:remote                                  # apply to production
 
 The tests apply the same migrations automatically (`tests/setup.ts`).
 
-## Deploying to Cloudflare Pages
+## Deploying to Cloudflare Workers
 
-You need a Cloudflare account; everything below fits the free plan. Log in once with `npx wrangler login`.
+The app deploys as one Cloudflare Worker with static assets. The Astro build in `dist/` is served directly by Cloudflare, and only `/api/*` runs the Worker script (`run_worker_first` in `wrangler.toml`). You need a Cloudflare account; everything below fits the free plan. Log in once with `npx wrangler login`.
 
 1. **Create the D1 database**
 
@@ -93,38 +94,40 @@ You need a Cloudflare account; everything below fits the free plan. Log in once 
 
    Copy the printed `database_id` into `wrangler.toml` under `[[d1_databases]]`.
 
-2. **Create the R2 bucket** (private by default; don't enable public access or an r2.dev URL)
+2. **Create the R2 bucket.** It's private by default; don't enable public access or an r2.dev URL.
 
    ```bash
    npx wrangler r2 bucket create spotter-photos
    ```
 
-3. **Create the Pages project and apply migrations**
+3. **Create the tables**
 
    ```bash
-   npx wrangler pages project create spotter --production-branch main
    npm run db:migrate:remote
    ```
 
-4. **Create the Google OAuth client.** Follow [Google sign-in setup](#google-sign-in-setup) and register your production redirect URI.
+   Re-run this whenever a new migration is added. Deploys don't run migrations.
 
-5. **Set the secrets**
+4. **Create the Worker from GitHub.** In the dashboard, open **Workers & Pages → Create application → Import a repository** and pick this repo.
+   - **Worker name:** must equal `name` in `wrangler.toml` (`partner-gym-trainer`).
+   - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy` (the default)
+
+   Every push to `main` then builds and deploys. To deploy from your machine without Git, run `npm run deploy`.
+
+5. **Create the Google OAuth client.** Follow [Google sign-in setup](#google-sign-in-setup) and register your production redirect URI.
+
+6. **Set the secrets**
 
    ```bash
-   npx wrangler pages secret put SUPER_USER_EMAILS    --project-name spotter   # e.g. you@gmail.com,friend@gmail.com
-   npx wrangler pages secret put GOOGLE_CLIENT_ID     --project-name spotter
-   npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name spotter
+   npx wrangler secret put SUPER_USER_EMAILS      # e.g. you@gmail.com,friend@gmail.com
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
    ```
 
-   These aren't in `wrangler.toml` on purpose: `[vars]` there would override dashboard values. Never set `DEV_LOGIN` or `ALLOWED_ORIGINS` in production. The site and API share one origin there, and dev login refuses any non-localhost host anyway.
+   Or use the dashboard: Worker → **Settings → Variables and Secrets → Add**, type **Secret**. Secrets take effect immediately and survive later deploys. They aren't in `wrangler.toml` on purpose: `[vars]` there would overwrite dashboard values on every deploy.
 
-6. **Deploy**
-
-   ```bash
-   npm run deploy
-   ```
-
-   The D1 and R2 bindings come from `wrangler.toml` (`DB` and `PHOTOS`). If you deploy through the dashboard's Git integration instead, use build command `npm run build` and output directory `dist`, and check that the bindings appear under Settings → Bindings.
+   Never set `DEV_LOGIN` or `ALLOWED_ORIGINS` in production. The site and API share one origin there, and dev login refuses any non-localhost host anyway.
 
 7. **First sign-in.** Open your site, choose **Continue with Google**, and use a Google account whose email is in `SUPER_USER_EMAILS`. Then go to Settings → Admin to create invite links for everyone else.
 
@@ -157,13 +160,13 @@ Sign-in is Google only, using the server-side authorization code flow with PKCE.
    |---|---|
    | Local (`npm run dev`) | `http://localhost:4321/api/auth/google/callback` |
    | Local (`npm run preview`, optional) | `http://localhost:8788/api/auth/google/callback` |
-   | Production (Pages domain) | `https://spotter.pages.dev/api/auth/google/callback` (use your project's actual `*.pages.dev` name) |
+   | Production (workers.dev) | `https://partner-gym-trainer.<your-subdomain>.workers.dev/api/auth/google/callback` (the URL is shown on the Worker's overview page) |
    | Production (custom domain, if any) | `https://your-domain.example/api/auth/google/callback` |
 
    You don't need any **Authorized JavaScript origins**; the browser never talks to Google's APIs directly.
-5. **Copy the credentials.** Copy the **Client ID** and **Client secret**; the secret is only shown in full once, so download the JSON if offered. Put them in `.dev.vars` for local use, and set them as Pages secrets for production (deploy step 5).
+5. **Copy the credentials.** Copy the **Client ID** and **Client secret**; the secret is only shown in full once, so download the JSON if offered. Put them in `.dev.vars` for local use, and set them as Worker secrets for production (deploy step 6).
 
-The app builds the redirect URI from the address the request came in on, so each deployment uses its own origin. Per-deployment preview URLs (`<hash>.spotter.pages.dev`) are different origins: Google sign-in only works on them if you register those URIs too. Use the dev login or the production domain instead.
+The app builds the redirect URI from the address the request came in on, so each deployment uses its own origin. Preview URLs (for example from Workers preview deployments) are different origins: Google sign-in only works on them if you register those URIs too. Use the dev login or the production domain instead.
 
 | Binding | Type | Name |
 |---|---|---|
@@ -178,7 +181,7 @@ All user-facing text lives in **`src/content/copy.ts`**, grouped by screen (`aut
 - **Feed lines:** the `feed` object.
 - **Milestone messages:** `home.milestones`.
 - **Quick emoji in chat:** `chat.emoji`.
-- **Reaction emoji:** `REACTION_EMOJI` in `functions/_lib/routes/social.ts`. The server validates against this list, so update `REACTIONS` in `src/islands/HomeView.tsx` to match.
+- **Reaction emoji:** `REACTION_EMOJI` in `worker/routes/social.ts`. The server validates against this list, so update `REACTIONS` in `src/islands/HomeView.tsx` to match.
 - **Colours, fonts and spacing:** tokens at the top of `src/styles/global.css`, with dark-theme overrides.
 - **PWA name and colours:** `public/manifest.webmanifest`. Regenerate icons with `python scripts/make-icons.py` (needs Pillow).
 
@@ -186,7 +189,7 @@ All user-facing text lives in **`src/content/copy.ts`**, grouped by screen (`aut
 
 ### Auth and access
 
-Sign-in is Google only (`functions/_lib/oauth.ts`, `functions/_lib/routes/auth.ts`). There's no client library.
+Sign-in is Google only (`worker/oauth.ts`, `worker/routes/auth.ts`). There's no client library.
 
 1. **`GET /api/auth/google/start`** generates `state`, a PKCE verifier and a nonce. It stores them, plus any invite token and the `next` path, in a short-lived cookie (`spotter_oauth`: HttpOnly, Secure, SameSite=Lax, 10 minutes, scoped to `/api/auth/google`). Then it redirects to Google with scopes `openid email profile`.
 2. **`GET /api/auth/google/callback`** compares `state` with the cookie in constant time and clears the cookie in every case. It exchanges the code, with the client secret and PKCE verifier, at Google's token endpoint, then checks the ID token's claims:
@@ -211,7 +214,7 @@ Other rules:
 
 ### Authorization middleware
 
-Every API request passes through `functions/_lib/app.ts` → `middleware.ts`:
+Every API request passes through `worker/index.ts` → `worker/app.ts` → `middleware.ts`:
 
 1. **Origin check:** rejects cross-origin writes.
 2. **Session lookup:** one D1 batch loads the user and their pair together.
@@ -263,6 +266,7 @@ The tests run inside workerd with a real (in-memory) D1 database and R2 bucket, 
 | `invites.test.ts` | Super-user-only access, 7-day expiry, single use, list/revoke, pagination |
 | `pairing.test.ts` | Codes, one-to-one rules (API and schema trigger), stale codes, unpair/re-pair, settings |
 | `authz.test.ts` | The `:who` middleware (unit and through the API), plan edit rules, third-party isolation, post-unpair access |
+| `worker-entry.test.ts` | The Worker entry: `/api/*` reaches the API, everything else goes to static assets |
 | `profile-plan.test.ts`, `daily-log.test.ts`, `photos.test.ts`, `chat.test.ts`, `social.test.ts` | The feature endpoints |
 
 ## Accessibility notes

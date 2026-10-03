@@ -1,7 +1,7 @@
 import { defineConfig } from 'astro/config';
 import preact from '@astrojs/preact';
 
-// Static site; the API is served by Cloudflare Pages Functions in /functions.
+// Static site, served as Workers Static Assets; the API is the Worker in /worker.
 export default defineConfig({
   output: 'static',
   integrations: [preact()],

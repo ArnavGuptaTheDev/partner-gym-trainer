@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIMITS } from '../functions/_lib/ratelimit';
+import { LIMITS } from '../worker/ratelimit';
 import { api, env, newPair, newUser, pairUp, uniqueIp } from './helpers';
 
 describe('pairing', () => {

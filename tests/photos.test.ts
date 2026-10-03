@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hasMetadata, sniffMime } from '../functions/_lib/image';
-import { MAX_UPLOADS_PER_DAY } from '../functions/_lib/routes/photos';
+import { hasMetadata, sniffMime } from '../worker/image';
+import { MAX_UPLOADS_PER_DAY } from '../worker/routes/photos';
 import { api, env, newPair, newUser, superCookie, type TestUser } from './helpers';
 
 const bytes = (...parts: (number[] | string)[]) =>

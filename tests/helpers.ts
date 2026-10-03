@@ -1,8 +1,8 @@
 import { env } from 'cloudflare:test';
-import { handle } from '../functions/_lib/app';
-import { b64url } from '../functions/_lib/crypto';
-import { GOOGLE_TOKEN_URL } from '../functions/_lib/oauth';
-import type { Env } from '../functions/_lib/types';
+import { handle } from '../worker/app';
+import { b64url } from '../worker/crypto';
+import { GOOGLE_TOKEN_URL } from '../worker/oauth';
+import type { Env } from '../worker/types';
 
 export const BASE = 'https://spotter.test';
 export const CLIENT_ID = 'test-client.apps.googleusercontent.com';

@@ -1,14 +1,29 @@
-# Cloudflare Pages project config. See README "Deploying" for setup steps.
-name = "spotter"
-pages_build_output_dir = "./dist"
+# Cloudflare Worker config. See README "Deploying" for setup steps.
+# `name` must match the Worker's name in the Cloudflare dashboard, or
+# Workers Builds refuses to deploy.
+name = "partner-gym-trainer"
+main = "worker/index.ts"
 compatibility_date = "2026-08-15"
 
+# The Astro build (npm run build) is served as static assets. Only /api/*
+# invokes the Worker script; every other request is served straight from
+# dist/ (static asset requests are free and don't count against Worker
+# request limits). public/_headers is applied to asset responses.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "404-page"
+run_worker_first = ["/api/*"]
+
+[observability]
+enabled = true
+
 # Environment variables are deliberately NOT declared here: [vars] in this
-# file would override dashboard values. Set them per project instead:
+# file would overwrite dashboard values on every deploy. Set them as secrets:
 #
-#   npx wrangler pages secret put SUPER_USER_EMAILS    --project-name spotter
-#   npx wrangler pages secret put GOOGLE_CLIENT_ID     --project-name spotter
-#   npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name spotter
+#   npx wrangler secret put SUPER_USER_EMAILS
+#   npx wrangler secret put GOOGLE_CLIENT_ID
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
 #
 #   SUPER_USER_EMAILS     Comma-separated emails that may sign up without an
 #                         invite and manage invites, accounts and storage.
@@ -21,7 +36,6 @@ compatibility_date = "2026-08-15"
 [[d1_databases]]
 binding = "DB"
 database_name = "spotter"
-# Replace with the id printed by `wrangler d1 create spotter`.
 database_id = "2abff030-c047-4098-a8ac-86114e8e45a5"
 migrations_dir = "migrations"
 

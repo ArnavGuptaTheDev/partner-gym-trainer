@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { pkceChallenge, sha256Hex } from '../functions/_lib/crypto';
-import { safeNext, verifyIdTokenClaims } from '../functions/_lib/oauth';
-import { LIMITS } from '../functions/_lib/ratelimit';
+import { pkceChallenge, sha256Hex } from '../worker/crypto';
+import { safeNext, verifyIdTokenClaims } from '../worker/oauth';
+import { LIMITS } from '../worker/ratelimit';
 import {
   api,
   BASE,
@@ -283,7 +283,7 @@ describe('dev login', () => {
 
   it('fails closed on any non-localhost host, even when enabled', async () => {
     const user = await newUser();
-    for (const base of [BASE, 'https://spotter.pages.dev', 'http://localhost.evil.com', 'http://127.0.0.2:8788']) {
+    for (const base of [BASE, 'https://partner-gym-trainer.example.workers.dev', 'http://localhost.evil.com', 'http://127.0.0.2:8788']) {
       expect((await api('GET', '/api/auth/dev-login', { base, env: on })).status, base).toBe(404);
       expect((await api('POST', '/api/auth/dev-login', { base, env: on, body: { email: user.email } })).status, base).toBe(404);
     }
