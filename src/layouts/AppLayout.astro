@@ -22,6 +22,7 @@ const tabs = [
     <a class="icon-btn" href="/settings" aria-label={nav.settings}><Icon name="settings" /></a>
   </header>
   <slot />
+  <div class="toast-region" aria-live="polite" slot="after" id="toasts"></div>
   <nav class="tabbar" aria-label="Main" slot="after">
     <ul>
       {tabs.map((t) => (
@@ -36,7 +37,8 @@ const tabs = [
     </ul>
   </nav>
   <script>
-    import { get, getMe } from '../lib/api';
+    import { get, getMe, post } from '../lib/api';
+    import { tone } from '../content/copy';
 
     // Auth guard: every app page needs a session; api() redirects on 401.
     getMe().catch(() => {});
@@ -61,6 +63,33 @@ const tabs = [
       } catch {}
       timer = setTimeout(tick, 30_000);
     };
+    // Nudges from the partner appear as a toast on any page.
+    const shown = new Set<string>();
+    window.addEventListener('spotter:pulse', async (e) => {
+      const nudges = (e as CustomEvent<{ nudges?: { id: string; kind: 'proud' | 'gym'; fromName: string }[] }>).detail.nudges ?? [];
+      const fresh = nudges.filter((n) => !shown.has(n.id));
+      if (!fresh.length) return;
+      const me = await getMe();
+      const tn = tone[me.pair?.type ?? 'friends'];
+      const region = document.getElementById('toasts')!;
+      for (const n of fresh) {
+        shown.add(n.id);
+        const el = document.createElement('div');
+        el.className = 'toast';
+        const text = document.createElement('span');
+        text.textContent = tn.nudgeToast[n.kind](n.fromName);
+        const btn = document.createElement('button');
+        btn.className = 'btn btn--small';
+        btn.type = 'button';
+        btn.textContent = 'OK';
+        btn.addEventListener('click', () => {
+          el.remove();
+          post('/api/nudges/seen').catch(() => {});
+        });
+        el.append(text, btn);
+        region.append(el);
+      }
+    });
     document.addEventListener('visibilitychange', tick);
     window.addEventListener('spotter:unread', (e) => show((e as CustomEvent<number>).detail));
     tick();

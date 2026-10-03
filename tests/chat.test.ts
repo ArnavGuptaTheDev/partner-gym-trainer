@@ -18,7 +18,7 @@ describe('chat', () => {
     const solo = await newUser();
     expect((await api('GET', '/api/messages', { cookie: solo.cookie })).status).toBe(404);
     expect((await send(solo, { body: 'hi' })).status).toBe(404);
-    expect((await api('GET', '/api/pulse', { cookie: solo.cookie })).data).toEqual({ unread: 0 });
+    expect((await api('GET', '/api/pulse', { cookie: solo.cookie })).data).toEqual({ unread: 0, nudges: [] });
   });
 
   it('delivers messages and supports polling with ?after', async () => {

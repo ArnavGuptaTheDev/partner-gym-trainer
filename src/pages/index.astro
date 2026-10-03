@@ -1,12 +1,8 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { nav } from '../content/copy';
+import HomeView from '../islands/HomeView';
+import { home } from '../content/copy';
 ---
-<AppLayout title={nav.home} tab="home">
-  <h1 id="hello">Hi!</h1>
-  <p class="muted">Home is coming together.</p>
+<AppLayout title={home.title} tab="home">
+  <HomeView client:load />
 </AppLayout>
-<script>
-  import { getMe } from '../lib/api';
-  getMe().then((m) => (document.getElementById('hello')!.textContent = `Hi, ${m.user.displayName}!`));
-</script>

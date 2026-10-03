@@ -384,6 +384,35 @@ legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding: 0; }
 .chat-composer textarea { min-height: 46px; max-height: 120px; resize: none; border-radius: 22px; padding: 11px 16px; }
 .icon-btn:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
 
+/* ---------- Home ---------- */
+
+.streak-card {
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, var(--berry)) 100%);
+  color: var(--accent-ink); border: 0;
+}
+.streak-main { display: flex; align-items: center; gap: 14px; }
+.flame { font-size: 2.8rem; line-height: 1; animation: flicker 2.4s ease-in-out infinite; transform-origin: 50% 90%; }
+.streak-split { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+.note { transform: rotate(-1deg); }
+.celebrate { border: 3px solid var(--sun); }
+.trophy { font-size: 3rem; display: block; animation: pop 0.6s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes flicker { 0%, 100% { transform: scale(1) rotate(-2deg); } 50% { transform: scale(1.08) rotate(3deg); } }
+@keyframes pop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.toast-region { position: fixed; left: 0; right: 0; top: 12px; z-index: 200; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 var(--gutter); }
+.toast {
+  pointer-events: auto; max-width: 520px; width: 100%;
+  background: var(--sun); color: var(--sun-ink); border-radius: var(--radius); padding: 12px 14px;
+  box-shadow: var(--shadow); display: flex; gap: 10px; align-items: center; font-weight: 600;
+  animation: slide-in 0.35s ease both;
+}
+.toast button { margin-left: auto; }
+@keyframes slide-in { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .flame, .trophy, .toast { animation: none !important; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }

@@ -70,17 +70,129 @@ export const errors = {
 export type PairType = 'couple' | 'friends';
 
 /** Copy that changes with the pair type: warm for couples, playful for friends. */
-export const tone: Record<PairType, Record<string, string>> = {
+export interface Tone {
+  greeting: (name: string) => string;
+  homeLead: string;
+  sharedStreak: string;
+  sharedStreakHint: string;
+  bothLogged: string;
+  nudgeProud: string;
+  nudgeGym: string;
+  nudgeSent: string;
+  nudgeToast: Record<'proud' | 'gym', (from: string) => string>;
+  noteTitle: (name: string) => string;
+  notePlaceholder: string;
+  noteFrom: (name: string) => string;
+  partnerDayTitle: (name: string) => string;
+  partnerQuiet: (name: string) => string;
+  versus: (leader: string) => string;
+  tie: string;
+  daysTogether: (n: number) => string;
+}
+
+export const tone: Record<PairType, Tone> = {
   couple: {
-    partnerLabel: 'your love',
-    greeting: 'Morning, gorgeous',
+    greeting: (name) => `Hey ${name}, you’ve got this 💞`,
     homeLead: 'Two hearts, one routine.',
+    sharedStreak: 'Our streak',
+    sharedStreakHint: 'Days you both showed up',
+    bothLogged: 'You both logged today. Look at you two! 🥰',
+    nudgeProud: 'Proud of you 💖',
+    nudgeGym: 'Gym date? 🏋️',
+    nudgeSent: 'Sent with love 💌',
+    nudgeToast: {
+      proud: (from) => `${from} is so proud of you 💖`,
+      gym: (from) => `${from} wants you at the gym 🏋️ Go get it!`,
+    },
+    noteTitle: (name) => `Leave ${name} a note`,
+    notePlaceholder: 'Something sweet for their home screen…',
+    noteFrom: (name) => `A note from ${name}`,
+    partnerDayTitle: (name) => `${name}’s day`,
+    partnerQuiet: (name) => `${name} hasn’t logged anything yet today. Maybe send some love?`,
+    versus: () => 'Teamwork makes the dream work 💞',
+    tie: 'Perfectly in sync 💞',
+    daysTogether: (n) => `${n.toLocaleString()} days together`,
   },
   friends: {
-    partnerLabel: 'your rival',
-    greeting: 'Rise and grind',
+    greeting: (name) => `Rise and grind, ${name} 💪`,
     homeLead: 'May the best spotter win.',
+    sharedStreak: 'Squad streak',
+    sharedStreakHint: 'Days you both showed up',
+    bothLogged: 'You both logged today. Nobody’s slacking. 😤',
+    nudgeProud: 'Respect 🫡',
+    nudgeGym: 'Get to the gym! 🏋️',
+    nudgeSent: 'Nudge delivered 📣',
+    nudgeToast: {
+      proud: (from) => `${from} says: respect 🫡 Nice work!`,
+      gym: (from) => `${from} says: GET TO THE GYM 🏋️ No excuses!`,
+    },
+    noteTitle: (name) => `Trash-talk ${name} (nicely)`,
+    notePlaceholder: 'Motivation, smack talk, or both…',
+    noteFrom: (name) => `${name} left you a note`,
+    partnerDayTitle: (name) => `What ${name} is up to`,
+    partnerQuiet: (name) => `${name} hasn’t logged a thing today. Suspicious. 👀`,
+    versus: (leader) => `${leader} is ahead today 👑`,
+    tie: 'Neck and neck! 🤝',
+    daysTogether: (n) => `${n.toLocaleString()} days as gym buddies`,
   },
+};
+
+export const home = {
+  title: 'Home',
+  soloTitle: 'Find your spotter',
+  soloLead: 'Spotter works best with a partner who sets your plan and cheers you on.',
+  soloCta: 'Pair up',
+  streakMine: 'You',
+  streakDays: (n: number) => (n === 1 ? '1 day' : `${n} days`),
+  todayTitle: 'Today',
+  you: 'You',
+  kcal: 'kcal',
+  exercises: 'exercises',
+  water: 'water',
+  logCta: 'Log today',
+  progressLink: 'Progress & weight',
+  noteSave: 'Leave note',
+  noteSaved: 'Note left ✓',
+  noteClear: 'Remove note',
+  noteLabel: 'Note of the day',
+  yourDayTitle: 'Your day',
+  yourQuiet: 'Nothing logged yet. Every streak starts with one day.',
+  reactLabel: (emoji: string) => `React ${emoji}`,
+  milestoneTitle: 'Milestone unlocked!',
+  milestoneClose: 'Yay! 🎉',
+  milestones: {
+    first_kg: 'First kilo down! The hardest one.',
+    halfway: 'Halfway to your target weight!',
+    target: 'Target weight reached! You did it!',
+    streak_7: '7-day streak! A whole week.',
+    streak_30: '30-day streak! This is a habit now.',
+    streak_100: '100-day streak! Legendary.',
+  } as Record<string, string>,
+  milestoneShort: {
+    first_kg: 'first kilo',
+    halfway: 'halfway to target',
+    target: 'target weight',
+    streak_7: '7-day streak',
+    streak_30: '30-day streak',
+    streak_100: '100-day streak',
+  } as Record<string, string>,
+};
+
+/** Feed lines. `who` is the display name, or "You". */
+export const feed = {
+  workout: (who: string, n: number, names: string[]) =>
+    `${who} finished ${n} exercise${n === 1 ? '' : 's'}${names.length ? `: ${names.join(', ')}` : ''} 🏋️`,
+  meal: (who: string, n: number, kcal: number) => `${who} logged ${n} meal${n === 1 ? '' : 's'}${kcal ? ` (${kcal.toLocaleString()} kcal)` : ''} 🥗`,
+  photo: (who: string) => `${who} posted a gym photo 📸`,
+  weight: (who: string, w: string) => `${who} weighed in at ${w} ⚖️`,
+  day: (who: string, water: number | null, burned: number | null) =>
+    [water ? `${who} drank ${water.toLocaleString()} ml of water 💧` : '', burned ? `${water ? 'and' : who} burned ${burned} kcal 🔥` : '']
+      .filter(Boolean)
+      .join(' '),
+  planOwn: (who: string) => `${who} tweaked their own plan ✍️`,
+  planForYou: (who: string) => `${who} updated your plan ✍️`,
+  planForPartner: (partner: string) => `You updated ${partner}’s plan ✍️`,
+  milestone: (who: string, what: string) => `${who} unlocked a milestone: ${what}! 🏆`,
 };
 
 export const pairing = {
