@@ -22,9 +22,9 @@ compatibility_date = "2026-08-15"
 binding = "DB"
 database_name = "spotter"
 # Replace with the id printed by `wrangler d1 create spotter`.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "2abff030-c047-4098-a8ac-86114e8e45a5"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
-binding = "PHOTOS"
+binding = "spotter_photos"
 bucket_name = "spotter-photos"
