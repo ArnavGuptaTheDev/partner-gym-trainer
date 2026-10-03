@@ -9,3 +9,8 @@ declare namespace Cloudflare {
     DEV_LOGIN?: string;
   }
 }
+
+declare module '*?raw' {
+  const content: string;
+  export default content;
+}
