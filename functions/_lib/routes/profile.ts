@@ -30,6 +30,26 @@ interface ProfileRow {
   current_weight_date: string | null;
 }
 
+/** Statements that record a weigh-in (shared with the daily log). */
+export function weightStatements(db: D1Database, userId: string, date: string, weightKg: number, now: number) {
+  return [
+    db
+      .prepare(
+        `INSERT INTO weight_logs (user_id, date, weight_kg, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, date) DO UPDATE SET weight_kg = excluded.weight_kg`,
+      )
+      .bind(userId, date, weightKg, now),
+    // The first weigh-in becomes the starting weight if none was set.
+    db
+      .prepare(
+        `INSERT INTO profiles (user_id, start_weight_kg, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(user_id) DO UPDATE SET start_weight_kg = COALESCE(start_weight_kg, ?2)`,
+      )
+      .bind(userId, weightKg, now),
+    upsertActivity(db, { userId, type: 'weight', refId: date, date, summary: { weightKg }, now }),
+  ];
+}
+
 export function registerProfileRoutes(r: Router) {
   r.get('/api/u/:who/profile', { who: 'read' }, async (c) => {
     const row = await c.env.DB.prepare(
@@ -114,23 +134,7 @@ export function registerProfileRoutes(r: Router) {
   r.put('/api/u/:who/weights/:date', { who: 'self' }, async (c) => {
     const date = assertLogDate(c.params.date, c.now);
     const { weightKg } = parse(PutWeight, await readJson(c.req));
-    const db = c.env.DB;
-    await db.batch([
-      db
-        .prepare(
-          `INSERT INTO weight_logs (user_id, date, weight_kg, created_at) VALUES (?, ?, ?, ?)
-           ON CONFLICT(user_id, date) DO UPDATE SET weight_kg = excluded.weight_kg`,
-        )
-        .bind(c.user.id, date, weightKg, c.now),
-      // The first weigh-in becomes the starting weight if none was set.
-      db
-        .prepare(
-          `INSERT INTO profiles (user_id, start_weight_kg, updated_at) VALUES (?1, ?2, ?3)
-           ON CONFLICT(user_id) DO UPDATE SET start_weight_kg = COALESCE(start_weight_kg, ?2)`,
-        )
-        .bind(c.user.id, weightKg, c.now),
-      upsertActivity(db, { userId: c.user.id, type: 'weight', refId: date, date, summary: { weightKg }, now: c.now }),
-    ]);
+    await c.env.DB.batch(weightStatements(c.env.DB, c.user.id, date, weightKg, c.now));
     return json({ date, weightKg });
   });
 

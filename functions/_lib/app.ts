@@ -7,6 +7,7 @@ import { registerAdminRoutes } from './routes/admin';
 import { registerPairRoutes } from './routes/pair';
 import { registerProfileRoutes } from './routes/profile';
 import { registerPlanRoutes } from './routes/plan';
+import { registerLogRoutes } from './routes/log';
 
 export const router = new Router();
 registerAuthRoutes(router);
@@ -14,6 +15,7 @@ registerAdminRoutes(router);
 registerPairRoutes(router);
 registerProfileRoutes(router);
 registerPlanRoutes(router);
+registerLogRoutes(router);
 
 export async function handle(req: Request, env: Env, waitUntil: (p: Promise<unknown>) => void = () => {}): Promise<Response> {
   const url = new URL(req.url);

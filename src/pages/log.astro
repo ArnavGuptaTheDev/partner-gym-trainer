@@ -1,0 +1,9 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import LogView from '../islands/LogView';
+import { log } from '../content/copy';
+---
+<AppLayout title={log.title} tab="log">
+  <h1>{log.title}</h1>
+  <LogView client:load />
+</AppLayout>
