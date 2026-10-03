@@ -28,3 +28,14 @@ describe('request pipeline', () => {
     expect(res.res.headers.get('cache-control')).toBe('no-store');
   });
 });
+
+describe('rate-limit counter retention (privacy policy)', () => {
+  it('deletes IP-keyed counters older than a day on the next counted request', async () => {
+    const { env } = await import('./helpers');
+    const { RATE_LIMIT_RETENTION_MS } = await import('../worker/ratelimit');
+    const old = Date.now() - RATE_LIMIT_RETENTION_MS - 1000;
+    await env.DB.prepare('INSERT INTO rate_limits (key, window_start, count) VALUES (?, ?, 1)').bind('oauthStart:203.0.113.9', old).run();
+    await api('GET', '/api/auth/google/start');
+    expect(await env.DB.prepare('SELECT 1 FROM rate_limits WHERE key = ?').bind('oauthStart:203.0.113.9').first()).toBeNull();
+  });
+});

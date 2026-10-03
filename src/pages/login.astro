@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import GoogleButton from '../components/GoogleButton.astro';
-import { auth } from '../content/copy';
+import { auth, legal } from '../content/copy';
 ---
 <BaseLayout title={auth.signIn} bare>
   <div class="auth-hero">
@@ -26,6 +26,7 @@ import { auth } from '../content/copy';
     <p class="alert alert--error" role="alert" id="dev-error"></p>
     <button class="btn btn--ghost" type="submit">{auth.devButton}</button>
   </form>
+  <p class="legal-links small center"><a href="/privacy">{legal.privacy}</a> · <a href="/terms">{legal.terms}</a></p>
 </BaseLayout>
 
 <script>

@@ -19,7 +19,8 @@ An invite-only, mobile-first gym app for two. Partners (a couple or gym buddies)
 ```
 src/
   content/copy.ts      ← ALL user-facing copy (incl. couple vs friends tone)
-  pages/               Astro pages (one per screen)
+  content/site.ts      ← app name, public contact email, legal effective date
+  pages/               Astro pages (one per screen; privacy.astro and terms.astro hold the legal text)
   islands/             Preact islands (Home, Plan, Log, Photos, Chat, Admin…)
   layouts/, components/
   lib/                 client helpers (api, image compression, units, hooks)
@@ -27,8 +28,10 @@ src/
 worker/
   index.ts             Worker entry: /api/* → API, everything else → static assets
   app.ts, middleware.ts, oauth.ts, routes/*, …   router, middleware, validation, crypto
-migrations/            0001…0007 D1 migrations
-scripts/               dev runner, seed script, icon generator
+  planwrite.ts         plan validation + SQL (shared with the import script)
+shared/                code used by both the Worker and the browser (plan rules, page parser)
+migrations/            0001…0009 D1 migrations (additive only; see below)
+scripts/               dev runner, seed, plan import, icon generator
 tests/                 API tests (auth, invites, pairing, authorization, …)
 public/                manifest, icons, _headers (security headers)
 ```
@@ -82,6 +85,32 @@ npm run db:migrate:remote                                  # apply to production
 
 The tests apply the same migrations automatically (`tests/setup.ts`).
 
+**The live app has real data, so every schema change is a new, additive migration.** Never edit a migration that has been applied, and never drop or rewrite existing rows in one. Add columns with defaults that keep old rows rendering as before.
+
+**Order when deploying a schema change:** run `npm run db:migrate:remote` first, then deploy. Additive migrations are safe for the code that's already running.
+
+## Importing a hand-made plan page
+
+`scripts/import-plan.mjs` converts a static plan page (the format of the hand-made "Sia ka Arnav" page) into a plan, set by the partner. It reuses the app's own parser, validation and save SQL.
+
+```bash
+# 1. Preview the parsed plan (writes nothing; also saves plan-import.json, git-ignored)
+node scripts/import-plan.mjs path/to/plan.html
+
+# 2. Check the two accounts on the live database (still read-only)
+node scripts/import-plan.mjs path/to/plan.html --user you@gmail.com --by partner@gmail.com --remote
+
+# 3. Write it
+node scripts/import-plan.mjs path/to/plan.html --user you@gmail.com --by partner@gmail.com --remote --apply --yes
+```
+
+The script refuses to write if:
+- either account doesn't exist,
+- the two accounts aren't paired with each other,
+- migrations 0008/0009 aren't applied, or
+- the plan already has exercise photos.
+
+It keeps the existing calorie target, goal and macros, and replaces the workout days, exercises and diet. Keep the source page out of the repo; it's git-ignored.
 ## Deploying to Cloudflare Workers
 
 The app deploys as one Cloudflare Worker with static assets. The Astro build in `dist/` is served directly by Cloudflare, and only `/api/*` runs the Worker script (`run_worker_first` in `wrangler.toml`). You need a Cloudflare account; everything below fits the free plan. Log in once with `npx wrangler login`.
@@ -184,6 +213,9 @@ All user-facing text lives in **`src/content/copy.ts`**, grouped by screen (`aut
 - **Reaction emoji:** `REACTION_EMOJI` in `worker/routes/social.ts`. The server validates against this list, so update `REACTIONS` in `src/islands/HomeView.tsx` to match.
 - **Colours, fonts and spacing:** tokens at the top of `src/styles/global.css`, with dark-theme overrides.
 - **PWA name and colours:** `public/manifest.webmanifest`. Regenerate icons with `python scripts/make-icons.py` (needs Pillow).
+- **App name, contact email, legal effective date:** `src/content/site.ts`. The privacy and terms pages read them from there.
+- **Privacy policy and terms:** `src/pages/privacy.astro` and `src/pages/terms.astro`. The privacy page describes what the code actually does (Google scopes, cookies, rate-limit IP counters, who can see what, unpairing, deletion). Update it whenever data handling changes.
+- **Exercise pictograms:** names in `shared/plan.ts` (`EXERCISE_ICONS`), drawings in `src/islands/ExerciseIcon.tsx`.
 
 ## How it works
 
@@ -240,6 +272,24 @@ Unpairing deletes the pair row. Chat, reactions, nudges and notes cascade away w
 - **In the browser:** photos are decoded with EXIF orientation applied, resized to 1600 px on the long edge, and re-encoded through a canvas. That re-encode strips all EXIF, including GPS. The output is WebP at ~80% where the browser supports it, otherwise JPEG. Quality and size step down until the file is under 1 MB.
 - **On the server:** the server checks the file signature, rejects any file that still has EXIF/XMP, enforces the 1 MB limit, and caps uploads at 10 per user per rolling 24 hours.
 - **Serving:** bytes are only served by `/api/photos/:id`, to the owner or their current partner, with `Cache-Control: private`.
+- **Exercise photos:** these are stored in their own table (`plan_media`), with their own limit of 20 uploads per person per day. They're served by `/api/plan-media/:id` to the plan's owner or partner. A photo removed from an exercise is deleted from R2 when the plan is saved. Photos uploaded but never saved are removed after a day. There's no scheduled cleanup job: this happens during the next upload or save for that plan.
+- **Adding a photo:** on phones, the app offers **Take photo** (the system camera, via `capture="environment"`; no camera permission prompt) or **Choose from gallery**. On desktop it offers a single **Add photo**. Either way you see a preview with retake/confirm before upload.
+
+### Plans
+
+- **Days:** each weekday is a workout day, a rest day with a message, or "same as" another workout day. A shared day uses that day's exercise list, so editing one changes both.
+- **Exercises:** each has a name and optional alternative, target muscles, a coach's note, sets and a rep range with an optional suffix (shown as "4×8-10" or "3×12 each"), equipment, a target weight, a pictogram, up to 3 photos and up to 3 links.
+- **Video links:** YouTube links show a thumbnail and load a `youtube-nocookie.com` player only when tapped. The CSP allows just `i.ytimg.com` images and that frame host.
+- **Diet:** meals have a time slot, a heading and items with "OR" alternatives. A plan also has a keep-stocked list and tips.
+
+### Account deletion
+
+**Settings → Delete account** asks for confirmation twice: a dialog, then typing `DELETE MY ACCOUNT`. Then:
+1. `DELETE /api/account` removes the user's R2 objects: gym and chat photos, and photos on their own plan.
+2. It deletes the user row. Every foreign key to `users` cascades or sets NULL, so this also unpairs (deleting the shared chat) and ends every session.
+3. The partner keeps their own data.
+
+`tests/account.test.ts` scans every column of every table, and the user's R2 prefixes, to prove nothing remains.
 
 ### Free-tier budget
 
@@ -267,6 +317,9 @@ The tests run inside workerd with a real (in-memory) D1 database and R2 bucket, 
 | `pairing.test.ts` | Codes, one-to-one rules (API and schema trigger), stale codes, unpair/re-pair, settings |
 | `authz.test.ts` | The `:who` middleware (unit and through the API), plan edit rules, third-party isolation, post-unpair access |
 | `worker-entry.test.ts` | The Worker entry: `/api/*` reaches the API, everything else goes to static assets |
+| `rich-plan.test.ts` | Days, shared days, rest days, structured reps, icons, links/YouTube parsing, validation rules, exercise photos (access, removal, lazy cleanup, limit), diet items/alternatives/stock |
+| `import-plan.test.ts` | The plan-page parser against a fixture page, and saving its output through the API |
+| `account.test.ts` | Account deletion leaves no rows or R2 objects; partner's data survives; confirmation required |
 | `profile-plan.test.ts`, `daily-log.test.ts`, `photos.test.ts`, `chat.test.ts`, `social.test.ts` | The feature endpoints |
 
 ## Accessibility notes

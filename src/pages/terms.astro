@@ -1,0 +1,80 @@
+---
+// Plain-language terms of use.
+import LegalLayout from '../layouts/LegalLayout.astro';
+import { siteConfig } from '../content/site';
+
+const app = siteConfig.appName;
+const email = siteConfig.contactEmail;
+---
+<LegalLayout title="Terms of use">
+  <p class="lead">
+    These terms are the ground rules for using {app}. They're short and written in plain language. By using {app}, you
+    agree to them.
+  </p>
+
+  <h2>What {app} is</h2>
+  <p>
+    {app} is a small, free, invite-only app for two people to coach each other: set each other's workout and diet
+    plans, log progress and share it. It's run by individuals, not a company, and it isn't a medical or professional
+    fitness service.
+  </p>
+
+  <h2>Not medical advice</h2>
+  <p>
+    Plans in {app} are written by your partner or by you, not by a doctor, dietitian or certified trainer. Nothing in
+    the app is medical advice. Check with a qualified professional before starting a new exercise or diet programme,
+    especially if you have a health condition, are pregnant, or are changing your weight quickly. The app warns about
+    very low calorie targets, but it's your call (and your partner's) to keep plans safe. Stop and get help if
+    something hurts or feels wrong.
+  </p>
+
+  <h2>Your account</h2>
+  <ul>
+    <li>You need an invite (or to be one of the people who run {app}) and a Google account to join.</li>
+    <li>Keep your Google account secure; anyone who can sign in to it can sign in to {app} as you.</li>
+    <li>One account per person, and you can be paired with one partner at a time.</li>
+  </ul>
+
+  <h2>Your content</h2>
+  <ul>
+    <li>
+      What you add (logs, photos, messages, plans you write) stays yours. You let {app} store it and show it to you and
+      your paired partner, which is what the app needs to work. See the <a href="/privacy">privacy policy</a>.
+    </li>
+    <li>
+      Only upload photos you have the right to share, and don't upload photos of other people without their permission.
+    </li>
+    <li>Be kind. Don't use {app} to harass, threaten or harm anyone, including your partner.</li>
+    <li>Don't try to break, overload or get around the app's security or limits, or access anyone else's data.</li>
+  </ul>
+
+  <h2>Ending things</h2>
+  <ul>
+    <li>You can unpair or delete your account at any time from Settings.</li>
+    <li>
+      The people who run {app} may deactivate an account that breaks these terms or puts others at risk. A deactivated
+      account can't sign in, and its data is kept unless the person asks us (by email) to delete it.
+    </li>
+    <li>
+      {app} is provided free and as-is. We do our best to keep it running and your data safe, but we can't promise it
+      will always be available or error-free, and we may change or shut down the app. If we plan to shut it down, we'll
+      give notice in the app so you can save what you need.
+    </li>
+  </ul>
+
+  <h2>Limits on responsibility</h2>
+  <p>
+    To the extent the law allows, the people who run {app} aren't responsible for injuries, health outcomes or losses
+    that come from following a plan, or from the app being unavailable or losing data. Nothing here limits rights you
+    have under consumer law that can't be limited.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    If we change these terms, we'll update this page and its effective date. If you keep using {app} after a change,
+    the new terms apply.
+  </p>
+
+  <h2>Contact</h2>
+  <p>Questions about these terms: <a href={`mailto:${email}`}>{email}</a>.</p>
+</LegalLayout>

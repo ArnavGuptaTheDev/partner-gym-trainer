@@ -1,10 +1,18 @@
 // All user-facing copy lives here. Edit freely; the UI reads from this file.
 // Strings that differ between couples and friends live under `tone`.
+// App name, contact email and the legal effective date live in ./site.ts.
+import { siteConfig } from './site';
 
 export const site = {
-  name: 'Spotter',
+  name: siteConfig.appName,
   tagline: 'Coach each other. Show up together.',
   description: 'An invite-only gym app for two: set each other’s plans and share the daily grind.',
+};
+
+export const legal = {
+  privacy: 'Privacy',
+  terms: 'Terms',
+  footerLabel: 'Legal',
 };
 
 export const nav = {

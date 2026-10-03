@@ -489,6 +489,19 @@ legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; padding: 0; }
 
 .danger-zone { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
 
+/* ---------- Legal pages and footers ---------- */
+
+.legal { max-width: 68ch; }
+.legal h2 { margin-top: 1.6em; }
+.legal ul { padding-left: 20px; }
+.legal li { margin-bottom: 6px; }
+.legal .lead { font-size: 1.05rem; }
+.legal code { font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; }
+.legal hr { border: 0; border-top: 1px solid var(--line); margin: 28px 0 14px; }
+.legal-back { margin-bottom: 8px; }
+.legal-links { margin-top: 18px; color: var(--text-soft); }
+.app-footer { margin-top: 28px; text-align: center; color: var(--text-soft); }
+
 /* ---------- Plan editor ---------- */
 
 .ex-edit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }

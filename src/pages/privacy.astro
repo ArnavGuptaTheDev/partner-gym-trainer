@@ -1,0 +1,172 @@
+---
+// Plain-language privacy policy. Every statement here describes what the
+// code actually does; if you change data handling, update this page.
+import LegalLayout from '../layouts/LegalLayout.astro';
+import { siteConfig } from '../content/site';
+
+const app = siteConfig.appName;
+const email = siteConfig.contactEmail;
+---
+<LegalLayout title="Privacy policy">
+  <p class="lead">
+    {app} is a small, invite-only app for two people who coach each other at the gym. This page explains, in plain
+    language, what data the app keeps, who can see it, and how to delete it.
+  </p>
+
+  <h2>The short version</h2>
+  <ul>
+    <li>Only you and your paired partner can see your plans, logs, photos and messages.</li>
+    <li>We don't show ads, run analytics, or sell or share your data with anyone.</li>
+    <li>You can delete your account and everything in it yourself, any time, from Settings.</li>
+  </ul>
+
+  <h2 id="google">What we get from Google</h2>
+  <p>
+    You sign in with Google. We ask Google only for the basic sign-in scopes (<code>openid</code>, <code>email</code>
+    and <code>profile</code>) and keep:
+  </p>
+  <ul>
+    <li><strong>Your Google account ID</strong>: a number that identifies your Google account. This is how we recognise you.</li>
+    <li><strong>Your email address</strong>: shown to super users (see below) and used to decide whether you can sign up.</li>
+    <li><strong>Your name</strong>: used as your starting display name. You can change your display name in Settings.</li>
+    <li><strong>Your profile picture's web address</strong>: shown as your avatar.</li>
+  </ul>
+  <p>
+    Your name, profile picture and email are refreshed from Google each time you sign in. We don't request or receive
+    any other Google data: no contacts, calendar, Drive, Gmail or anything else. We never see your Google password.
+  </p>
+
+  <h2 id="yours">What you add</h2>
+  <ul>
+    <li><strong>Profile and goals</strong>: height, start and target weight, goal, target date, units and time zone.</li>
+    <li><strong>Weight log</strong>: your weigh-ins by date.</li>
+    <li><strong>Plans</strong>: your workout and diet plan (usually written by your partner), including exercise photos and links.</li>
+    <li><strong>Daily logs</strong>: exercises done with sets, reps and weight; meals and calories; water; calories burned.</li>
+    <li><strong>Photos</strong>: gym photos, chat photos and exercise photos.</li>
+    <li><strong>Chat and social</strong>: messages, reactions, nudges and notes of the day.</li>
+  </ul>
+  <p>
+    The app also derives streaks, milestones and an activity feed from what you log.
+  </p>
+  <p>
+    <strong>Photos are cleaned on your device before upload.</strong> They're resized and re-encoded in your browser,
+    which removes location (GPS) and camera details, and the server rejects any photo that still contains them.
+  </p>
+
+  <h2 id="who">Who can see your data</h2>
+  <ul>
+    <li><strong>You</strong>, of course.</li>
+    <li>
+      <strong>Your paired partner</strong>, while you're paired. They can see your profile, weights, plan, daily logs,
+      gym photos, exercise photos and activity, and you share one chat. Your partner can also edit your plan (and if you
+      turn on self-editing, so can you). Nobody else can be paired with you; pairing is strictly one-to-one.
+    </li>
+    <li>
+      <strong>Super users</strong> are the people who run this {app} and send invites. In the app they can see every
+      account's email, display name, sign-up date and whether it's active; the list of invites with each invite's note
+      and who used it; and how much photo storage each person uses (totals only). They can deactivate and reactivate
+      accounts. <strong>The app gives super users no way to read your plans, logs, weights, photos or messages.</strong>
+    </li>
+    <li>
+      <strong>The operator's hosting account.</strong> As with any app, whoever controls the Cloudflare account that hosts
+      {app} could technically access the database and photo storage directly, outside the app. We don't do this except
+      when needed to keep the service running or when legally required.
+    </li>
+  </ul>
+
+  <h2 id="storage">Where it's stored</h2>
+  <ul>
+    <li>The app runs on <strong>Cloudflare Workers</strong>.</li>
+    <li>Your account and everything you log are stored in a <strong>Cloudflare D1</strong> database.</li>
+    <li>
+      Photos are stored in a private <strong>Cloudflare R2</strong> bucket. They have no public web address: they're
+      only sent to a signed-in user allowed to see them (you or your partner).
+    </li>
+    <li>
+      Cloudflare keeps short-lived technical logs of requests (such as the page or API address, time and any errors)
+      to help keep the service running. These expire automatically after a few days.
+    </li>
+    <li>
+      Cloudflare's database keeps a rolling backup history for disaster recovery. Deleted data drops out of that history
+      on its own within about a month.
+    </li>
+  </ul>
+
+  <h2 id="cookies">Cookies and your device</h2>
+  <ul>
+    <li>
+      <strong><code>spotter_session</code></strong> keeps you signed in. It's a random token (we store only a scrambled
+      version of it). It's sent only to this site and isn't readable by scripts. It lasts up to 30 days and is renewed
+      while you keep using the app. Signing out ends it.
+    </li>
+    <li>
+      <strong><code>spotter_oauth</code></strong> exists only while you're signing in with Google (at most 10 minutes).
+      It protects the sign-in from tampering and, if you came from an invite link, carries the invite.
+    </li>
+    <li>Your light/dark theme choice is saved in your browser only.</li>
+  </ul>
+  <p>
+    To slow down abuse, the server counts sign-in and pairing attempts per <strong>IP address</strong>. These counters
+    are short-lived: any counter over a day old is deleted the next time someone signs in or enters a pairing code.
+  </p>
+
+  <h2 id="third-parties">Other services your device talks to</h2>
+  <ul>
+    <li><strong>Google</strong>, when you sign in, and to load your profile picture from Google's image servers.</li>
+    <li>
+      <strong>YouTube</strong>, only for video links in a plan. When you open an exercise's photos and videos, the video's
+      thumbnail loads from YouTube's image server; the video player (YouTube's privacy-enhanced
+      <code>youtube-nocookie.com</code> version) loads only when you tap play.
+    </li>
+    <li>Other links in a plan open the linked website in a new tab.</li>
+  </ul>
+  <p>
+    There are no ads, no analytics or tracking scripts, and no social media widgets. Fonts are served from {app} itself.
+    <strong>We don't sell or share your data.</strong>
+  </p>
+
+  <h2 id="unpairing">When you unpair</h2>
+  <p>Either partner can unpair at any time in Settings. When you do:</p>
+  <ul>
+    <li>You immediately stop seeing each other's data.</li>
+    <li>Your shared chat (messages, and the reactions, nudges and notes of the day between you) is deleted.</li>
+    <li>
+      Each of you keeps your own profile, weights, plan, logs and gym photos. A plan your partner wrote for you stays with
+      you, and you can then edit it yourself.
+    </li>
+    <li>
+      Photos you sent in the chat stay stored in your own account, where the app no longer shows them to anyone. They're
+      deleted with your account.
+    </li>
+  </ul>
+
+  <h2 id="deletion">Deleting your account</h2>
+  <p>
+    Go to <strong>Settings → Delete account</strong>. After you confirm twice, the deletion happens immediately and
+    can't be undone:
+  </p>
+  <ul>
+    <li>Your account, profile, weights, plan, daily logs, streaks, milestones and activity are deleted.</li>
+    <li>Your gym photos, chat photos and the photos on your plan are deleted from storage.</li>
+    <li>You're unpaired; your shared chat, reactions, nudges and notes are deleted.</li>
+    <li>You're signed out everywhere.</li>
+    <li>If you're a super user, invites you created are deleted (people who already joined keep their accounts).</li>
+  </ul>
+  <p>
+    Your former partner keeps their own data. That includes the plan you wrote for them and any exercise photos you
+    added to it, since those are part of their plan; their plan simply no longer says who set it.
+  </p>
+  <p>
+    Can't sign in? Email <a href={`mailto:${email}`}>{email}</a> from the address on your account and we'll delete it
+    for you.
+  </p>
+
+  <h2 id="changes">Changes to this policy</h2>
+  <p>
+    If we change how your data is handled, we'll update this page and its effective date. For significant changes we'll
+    let you know in the app.
+  </p>
+
+  <h2 id="contact">Contact</h2>
+  <p>Questions or requests about your data: <a href={`mailto:${email}`}>{email}</a>.</p>
+</LegalLayout>

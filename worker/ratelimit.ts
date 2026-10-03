@@ -1,6 +1,9 @@
 import { HttpError } from './http';
 import type { Ctx } from './types';
 
+/** How long IP-keyed counters may be kept. */
+export const RATE_LIMIT_RETENTION_MS = 24 * 3600_000;
+
 export const LIMITS = {
   oauthStart: { max: 30, windowMs: 15 * 60 * 1000 },
   oauthCallback: { max: 30, windowMs: 15 * 60 * 1000 },
@@ -25,10 +28,10 @@ export async function rateLimit(c: Ctx, bucket: keyof typeof LIMITS): Promise<vo
     .bind(key, c.now, cutoff)
     .first<{ count: number; window_start: number }>();
 
-  // Occasionally sweep expired rows so the table stays small.
-  if (Math.random() < 0.02) {
-    c.waitUntil(c.env.DB.prepare('DELETE FROM rate_limits WHERE window_start <= ?').bind(c.now - 24 * 3600_000).run());
-  }
+  // Counters are keyed by IP address, so clear out any older than a day on
+  // every counted request (the privacy policy relies on this). The table only
+  // holds recent sign-in/pairing attempts, so this delete is tiny.
+  c.waitUntil(c.env.DB.prepare('DELETE FROM rate_limits WHERE window_start <= ?').bind(c.now - RATE_LIMIT_RETENTION_MS).run());
 
   if (row && row.count > max) {
     const retry = Math.ceil((row.window_start + windowMs - c.now) / 1000);

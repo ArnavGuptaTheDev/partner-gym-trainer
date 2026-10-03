@@ -1,0 +1,27 @@
+---
+// Public pages (no session needed): privacy policy and terms.
+import BaseLayout from './BaseLayout.astro';
+import { legal, site } from '../content/copy';
+import { siteConfig } from '../content/site';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+const effective = new Date(`${siteConfig.legalEffectiveDate}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+---
+<BaseLayout title={title} bare>
+  <article class="legal">
+    <p class="legal-back"><a href="/">← {site.name}</a></p>
+    <h1>{title}</h1>
+    <p class="muted small">Effective {effective}</p>
+    <slot />
+    <hr />
+    <p class="small muted">
+      Questions? Email <a href={`mailto:${siteConfig.contactEmail}`}>{siteConfig.contactEmail}</a>.
+    </p>
+    <nav class="legal-links small" aria-label={legal.footerLabel}>
+      <a href="/privacy">{legal.privacy}</a> · <a href="/terms">{legal.terms}</a>
+    </nav>
+  </article>
+</BaseLayout>

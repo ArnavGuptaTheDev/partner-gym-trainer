@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { auth } from '../content/copy';
+import { auth, legal } from '../content/copy';
 ---
 <BaseLayout title={auth.inviteOnlyTitle} bare>
   <div class="auth-hero">
@@ -9,4 +9,5 @@ import { auth } from '../content/copy';
     <p class="muted">{auth.inviteOnlyLead}</p>
     <a class="btn btn--ghost" href="/login">{auth.backToSignIn}</a>
   </div>
+  <p class="legal-links small center"><a href="/privacy">{legal.privacy}</a> · <a href="/terms">{legal.terms}</a></p>
 </BaseLayout>

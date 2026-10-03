@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import GoogleButton from '../components/GoogleButton.astro';
-import { auth } from '../content/copy';
+import { auth, legal } from '../content/copy';
 ---
 <BaseLayout title={auth.joinTitle} bare>
   <div class="auth-hero">
@@ -16,6 +16,7 @@ import { auth } from '../content/copy';
     </div>
   </div>
   <p class="center small" style="margin-top:20px"><a href="/login">{auth.backToSignIn}</a></p>
+  <p class="legal-links small center"><a href="/privacy">{legal.privacy}</a> · <a href="/terms">{legal.terms}</a></p>
 </BaseLayout>
 
 <script>
