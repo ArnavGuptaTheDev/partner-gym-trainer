@@ -1,0 +1,47 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { auth, nav, settings } from '../content/copy';
+---
+<AppLayout title={nav.settings}>
+  <h1>{nav.settings}</h1>
+  <div class="stack">
+    <section class="card stack" aria-labelledby="theme-h">
+      <h2 id="theme-h">{settings.themeTitle}</h2>
+      <fieldset>
+        <legend class="sr-only">{settings.themeTitle}</legend>
+        <div class="segmented" id="theme">
+          <label><input type="radio" name="theme" value="system" /><span>{settings.themeSystem}</span></label>
+          <label><input type="radio" name="theme" value="light" /><span>{settings.themeLight}</span></label>
+          <label><input type="radio" name="theme" value="dark" /><span>{settings.themeDark}</span></label>
+        </div>
+      </fieldset>
+    </section>
+    <a class="card spread" href="/admin" id="admin-link" hidden style="text-decoration:none;color:inherit">
+      <strong>{nav.admin}</strong><span aria-hidden="true">→</span>
+    </a>
+    <button class="btn btn--ghost btn--block" type="button" id="logout">{auth.logout}</button>
+  </div>
+</AppLayout>
+
+<script>
+  import { getMe, post } from '../lib/api';
+
+  const saved = (() => { try { return localStorage.getItem('spotter-theme'); } catch { return null; } })() ?? 'system';
+  const radios = document.querySelectorAll<HTMLInputElement>('#theme input');
+  radios.forEach((r) => {
+    r.checked = r.value === saved;
+    r.addEventListener('change', () => {
+      const v = r.value;
+      try { v === 'system' ? localStorage.removeItem('spotter-theme') : localStorage.setItem('spotter-theme', v); } catch {}
+      if (v === 'system') delete document.documentElement.dataset.theme;
+      else document.documentElement.dataset.theme = v;
+    });
+  });
+
+  getMe().then((m) => { if (m.user.isSuper) document.getElementById('admin-link')!.hidden = false; });
+
+  document.getElementById('logout')!.addEventListener('click', async () => {
+    await post('/api/auth/logout').catch(() => {});
+    location.href = '/login';
+  });
+</script>

@@ -1,0 +1,43 @@
+---
+import '../styles/fonts.css';
+import '../styles/global.css';
+import { site } from '../content/copy';
+
+interface Props {
+  title?: string;
+  bare?: boolean;
+}
+const { title, bare = false } = Astro.props;
+const fullTitle = title ? `${title} · ${site.name}` : site.name;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={site.description} />
+    <meta name="theme-color" content="#fff6ec" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1b1218" media="(prefers-color-scheme: dark)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="robots" content="noindex" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <script is:inline>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        var t = localStorage.getItem('spotter-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <main id="main" class:list={['page', { 'page--bare': bare }]}>
+      <slot />
+    </main>
+    <slot name="after" />
+  </body>
+</html>

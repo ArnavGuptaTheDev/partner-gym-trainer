@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+SUPER_USER_EMAILS=you@example.com
+# The Astro dev server proxies /api to wrangler, so allow its origin.
+ALLOWED_ORIGINS=http://localhost:4321

@@ -1,0 +1,10 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import AdminPanel from '../islands/AdminPanel';
+import { admin } from '../content/copy';
+---
+<AppLayout title={admin.title}>
+  <h1>{admin.title}</h1>
+  <p class="muted">{admin.lead}</p>
+  <AdminPanel client:load />
+</AppLayout>

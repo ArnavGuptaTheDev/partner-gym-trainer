@@ -1,0 +1,43 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import Icon from '../components/Icon.astro';
+import { nav, site } from '../content/copy';
+
+interface Props {
+  title: string;
+  tab?: 'home' | 'plan' | 'log' | 'photos' | 'chat';
+}
+const { title, tab } = Astro.props;
+const tabs = [
+  { key: 'home', href: '/', label: nav.home },
+  { key: 'plan', href: '/plan', label: nav.plan },
+  { key: 'log', href: '/log', label: nav.log },
+  { key: 'photos', href: '/photos', label: nav.photos },
+  { key: 'chat', href: '/chat', label: nav.chat },
+] as const;
+---
+<BaseLayout title={title}>
+  <header class="app-header">
+    <a class="brand" href="/"><span class="brand-dot" aria-hidden="true"></span>{site.name}</a>
+    <a class="icon-btn" href="/settings" aria-label={nav.settings}><Icon name="settings" /></a>
+  </header>
+  <slot />
+  <nav class="tabbar" aria-label="Main" slot="after">
+    <ul>
+      {tabs.map((t) => (
+        <li>
+          <a href={t.href} aria-current={tab === t.key ? 'page' : undefined} data-tab={t.key}>
+            <Icon name={t.key} />
+            <span>{t.label}</span>
+            {t.key === 'chat' && <span class="badge" data-unread hidden></span>}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+  <script>
+    import { getMe } from '../lib/api';
+    // Auth guard: every app page needs a session; api() redirects on 401.
+    getMe().catch(() => {});
+  </script>
+</BaseLayout>
