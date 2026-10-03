@@ -1,0 +1,9 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import ProgressView from '../islands/ProgressView';
+import { progress } from '../content/copy';
+---
+<AppLayout title={progress.title} tab="home">
+  <h1>{progress.title}</h1>
+  <ProgressView client:load />
+</AppLayout>

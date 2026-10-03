@@ -1,0 +1,9 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import PlanView from '../islands/PlanView';
+import { plan } from '../content/copy';
+---
+<AppLayout title={plan.title} tab="plan">
+  <h1>{plan.title}</h1>
+  <PlanView client:load />
+</AppLayout>
